@@ -52,7 +52,7 @@ def test_public_manifests_advertise_only_shipped_providers() -> None:
     for manifest in (plugin, entry):
         claims = f"{manifest['description']} {' '.join(manifest['keywords'])}".lower()
         assert "chatgpt" in claims or "codex" in claims
-        assert "copilot" not in claims
+        assert "copilot" in claims
 
 
 def test_all_skills_present_with_frontmatter() -> None:

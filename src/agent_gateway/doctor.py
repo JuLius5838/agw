@@ -67,23 +67,10 @@ def _paths_and_perms(paths: Paths) -> list[Check]:
         checks.append(_perm_check(paths.credentials_dir, 0o700, "credentials dir perms"))
     if paths.proxy_key_file.exists():
         checks.append(_perm_check(paths.proxy_key_file, 0o600, "proxy-key perms"))
-    for provider in ("chatgpt",):
+    for provider in ("chatgpt", "copilot"):
         provider_dir = paths.provider_credentials_dir(provider)
         if provider_dir.exists():
             checks.append(_perm_check(provider_dir, 0o700, f"{provider} creds dir perms"))
-    legacy_copilot = paths.provider_credentials_dir("copilot")
-    if legacy_copilot.exists():
-        permission = _perm_check(legacy_copilot, 0o700, "legacy copilot creds")
-        level = Level.fail if permission.level is Level.fail else Level.warn
-        checks.append(
-            Check(
-                level,
-                permission.name,
-                f"{permission.detail}; provider support is removed. "
-                "Review and delete this directory, or use "
-                "`agw uninstall --credentials` to remove every stored provider credential.",
-            )
-        )
     return checks
 
 

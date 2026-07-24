@@ -24,8 +24,9 @@ pinned in `uv.lock`; upgrades require a reviewed change (see `docs/security.md`)
   internal key. Neither is an upstream billing credential.
 - OAuth credentials and the proxy key are per developer, stored `0600` under
   `0700` directories, and never committed to Git.
-- Provider token directories are scoped to authentication commands and the managed
-  LiteLLM process; they are never added to Claude Code's child environment.
+- ChatGPT and GitHub Copilot use separate provider token directories. Those directories are
+  scoped to authentication commands and the managed LiteLLM process; they are never added
+  to Claude Code's child environment.
 - Claude request-time credentials are forwarded only on the native Anthropic path
   and stripped before every external LiteLLM request.
 - Operational logs persist only allowlisted, redacted lifecycle/error metadata.

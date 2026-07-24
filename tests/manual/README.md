@@ -1,15 +1,16 @@
 # Manual / live tests
 
-These require a **real** ChatGPT/Codex subscription and a TTY. They are **not** part
-of the default suite (they carry the `live` marker and are skipped) and must never
-run in CI.
+These require a **real** external-provider subscription (ChatGPT/Codex or GitHub
+Copilot, depending on the enabled model) and a TTY. They are **not** part of the
+default suite (they carry the `live` marker and are skipped) and must never run in CI.
 
 ## Prerequisites
 
 ```bash
 uv sync --all-groups
 uv run agw setup
-uv run agw auth chatgpt
+uv run agw auth chatgpt     # when a ChatGPT/Codex model is enabled
+uv run agw auth copilot    # when a GitHub Copilot model is enabled
 ```
 
 ## Run
@@ -22,7 +23,10 @@ uv run pytest tests/manual -m live -v
 
 Capture **sanitized** evidence (no prompts, tokens, or codes) for each:
 
-- [ ] ChatGPT/Codex main-session streamed response; proxy evidence shows the ChatGPT upstream.
+- [ ] Each enabled provider produces a main-session streamed response; sanitized proxy
+      evidence shows the exact selected public model/provider.
+- [ ] `agw auth copilot` exchanges its staged GitHub token for Copilot entitlement during
+      model verification; failures remain attributed to Copilot with no fallback.
 - [ ] `agw models verify` passes the full Anthropic-protocol contract against a real upstream.
 - [ ] Default model used when no `--model` is passed; `/model` switch works.
 - [ ] Single custom picker entry on the pinned Claude version; direct selection for the

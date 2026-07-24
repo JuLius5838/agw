@@ -121,14 +121,14 @@ def test_setup_removes_retired_provider_entries(tmp_path):
 # keep this rollback comment
 default_model: legacy-model
 models:
-  - name: gpt-5.6-sol
-    provider: chatgpt
-    upstream_model: chatgpt/gpt-5.6-sol
-    mode: responses
+  - name: gpt-4.1
+    provider: copilot
+    upstream_model: github_copilot/gpt-4.1
+    mode: chat
     enabled: true
   - name: legacy-model
-    provider: copilot
-    upstream_model: github_copilot/legacy-model
+    provider: anthropic
+    upstream_model: anthropic/legacy-model
     mode: chat
     enabled: true
 """
@@ -140,9 +140,11 @@ models:
 
     registry = load_registry(paths)
     assert registry.default_model is None
-    assert [entry.name for entry in registry.active_models()] == ["gpt-5.6-sol"]
-    assert any("copilot" in note for note in result.notes)
-    assert "github_copilot/" not in paths.models_file.read_text()
+    assert [entry.name for entry in registry.active_models()] == ["gpt-4.1"]
+    assert registry.get_active("gpt-4.1").provider.value == "copilot"
+    assert any("anthropic" in note for note in result.notes)
+    assert "provider: anthropic" not in paths.models_file.read_text()
+    assert "github_copilot/gpt-4.1" in paths.models_file.read_text()
     backup = paths.models_file.with_name("models.pre-retired-providers.yaml")
     assert backup.read_text() == original
     if os.name == "posix":
@@ -161,9 +163,9 @@ def test_setup_removes_inactive_retired_provider_candidate(tmp_path):
         """
 default_model: null
 models:
-  - name: gpt-4.1
-    provider: copilot
-    upstream_model: github_copilot/gpt-4.1
+  - name: legacy-model
+    provider: anthropic
+    upstream_model: anthropic/legacy-model
     mode: chat
     enabled: false
 """
@@ -171,7 +173,7 @@ models:
 
     run_setup(paths, no_shell=True, env=_env(tmp_path))
 
-    assert "copilot" not in paths.models_file.read_text()
+    assert "provider: anthropic" not in paths.models_file.read_text()
 
 
 def test_setup_clears_retired_default_when_supported_candidate_is_inactive(tmp_path):
@@ -182,13 +184,13 @@ def test_setup_clears_retired_default_when_supported_candidate_is_inactive(tmp_p
 default_model: shared-model
 models:
   - name: shared-model
-    provider: chatgpt
-    upstream_model: chatgpt/shared-model
-    mode: responses
-    enabled: false
-  - name: shared-model
     provider: copilot
     upstream_model: github_copilot/shared-model
+    mode: chat
+    enabled: false
+  - name: shared-model
+    provider: anthropic
+    upstream_model: anthropic/shared-model
     mode: chat
     enabled: true
 """
@@ -201,6 +203,63 @@ models:
     registry = load_registry(paths)
     assert registry.default_model is None
     assert registry.active_models() == ()
+    assert {entry.provider.value for entry in registry.inactive_models()} == {"copilot"}
+
+
+def test_setup_preserves_supported_copilot_entries_without_rewriting(tmp_path):
+    paths = _paths(tmp_path)
+    paths.config_dir.mkdir(parents=True, exist_ok=True)
+    original = """
+# local Copilot candidate
+default_model: null
+models:
+  - name: gpt-4.1
+    provider: copilot
+    upstream_model: github_copilot/gpt-4.1
+    mode: chat
+    enabled: false
+"""
+    paths.models_file.write_text(original)
+
+    result = run_setup(paths, no_shell=True, env=_env(tmp_path))
+
+    assert paths.models_file.read_text() == original
+    assert any("kept existing model registry" in note for note in result.notes)
+    assert not paths.models_file.with_name("models.pre-retired-providers.yaml").exists()
+
+
+def test_setup_provider_owner_can_select_copilot(tmp_path):
+    paths = _paths(tmp_path)
+    paths.config_dir.mkdir(parents=True, exist_ok=True)
+    paths.models_file.write_text(
+        """
+default_model: null
+models:
+  - name: shared
+    provider: chatgpt
+    upstream_model: chatgpt/shared
+    mode: responses
+    enabled: false
+  - name: shared
+    provider: copilot
+    upstream_model: github_copilot/shared
+    mode: chat
+    enabled: false
+"""
+    )
+
+    result = run_setup(
+        paths,
+        provider_owner=["shared=copilot"],
+        default_model="shared",
+        no_shell=True,
+        env=_env(tmp_path),
+    )
+
+    from agent_gateway.model_registry import load_registry
+
+    assert result.active_models == ["shared"]
+    assert load_registry(paths).get_active("shared").provider.value == "copilot"
 
 
 def test_setup_rejects_unknown_provider_owner(tmp_path):

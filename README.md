@@ -5,17 +5,19 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Route Claude Code through a local hybrid gateway: native Claude requests keep the saved
-Claude subscription, while exact configured GPT names route to a private LiteLLM process
-on your machine.
+Claude subscription, while exact configured external names route to a private LiteLLM
+process on your machine.
 
 ```text
                          ┌▶ Anthropic (native Claude Code OAuth)
 claude ─▶ AGW front router ─┤
- /model switches inside Claude └▶ private LiteLLM ─▶ ChatGPT/Codex
+ /model switches inside Claude └▶ private LiteLLM ─┬▶ ChatGPT/Codex
+                                                   └▶ GitHub Copilot
 ```
 
 You and Claude always name real models (for example `claude-opus-4-8`, `gpt-5.6-sol`);
-provider prefixes such as `anthropic/` or `chatgpt/` remain private routing configuration.
+provider prefixes such as `anthropic/`, `chatgpt/`, or `github_copilot/` remain private
+routing configuration.
 
 AGW never mints, stores, or injects a second Anthropic token. Claude traffic is forwarded
 with Claude Code's saved login; only external model selections enter LiteLLM.
@@ -53,7 +55,9 @@ and authenticate an exact model/provider pair.
 ```bash
 agw setup                         # install local state and configure external models
 agw setup --provider-owner gpt-5.6-sol=chatgpt  # enable this exact external route
-agw auth chatgpt                  # OAuth device flow for ChatGPT/Codex (needs a TTY)
+agw setup --provider-owner gpt-4.1=copilot      # or an exact Copilot route
+agw auth chatgpt                  # ChatGPT/Codex OAuth device flow (needs a TTY)
+agw auth copilot                 # GitHub Copilot OAuth device flow (needs a TTY)
 claude                            # managed workflow after setup
 agw claude                        # canonical/debug spelling
 agw claude --model gpt-5.6-sol    # launch on a specific model
@@ -110,6 +114,9 @@ Create two teammates: use gpt-5.6-sol for implementation and <other-model> for r
 - The gateway never falls back to a different model or load-balances across subscriptions.
 - The pinned LiteLLM runner routes ChatGPT through its Responses adapter so Claude's system
   prompt becomes `instructions`, not a rejected `system` message.
+- GitHub Copilot uses LiteLLM 1.93.0's `github_copilot` adapter and a credential directory
+  isolated from ChatGPT. The packaged `gpt-4.1` candidate is disabled until explicitly
+  enabled, authenticated, and live-verified for the user's Copilot subscription.
 - Claude Code effort values reach GPT-5.6 as `reasoning.effort` without silently
   downgrading `xhigh` or `max`.
 - Claude's hosted web-search declaration becomes Claude Code's client-side

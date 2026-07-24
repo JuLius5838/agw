@@ -69,7 +69,7 @@ def _parse_provider_owner(entries: Sequence[str]) -> dict[str, Provider]:
         except ValueError as exc:
             raise ConfigError(
                 f"unknown provider in --provider-owner {entry!r}: {provider_str}",
-                hint="Provider must be `chatgpt`.",
+                hint="Provider must be `chatgpt` or `copilot`.",
             ) from exc
     return owners
 
@@ -105,7 +105,7 @@ def _apply_registry_choices(
     return yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
 
 
-_REMOVED_REGISTRY_PROVIDERS = frozenset({"anthropic", "copilot"})
+_REMOVED_REGISTRY_PROVIDERS = frozenset({"anthropic"})
 
 
 def _migrate_removed_providers(raw_yaml: str) -> tuple[str, frozenset[str]]:

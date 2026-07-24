@@ -123,8 +123,8 @@ def test_agent_teams_opt_in_controls_flag():
 
 
 def test_provider_token_dirs_never_leak_into_child_env():
-    # Even when the surrounding shell exports provider credential paths (or the
-    # retired Copilot variable), none may reach the native Claude child.
+    # Even when the surrounding shell exports provider credential paths, none may
+    # reach the native Claude child.
     base = {
         "CHATGPT_TOKEN_DIR": "/home/dev/.config/agent-gateway/credentials/chatgpt",
         "CHATGPT_AUTH_FILE": "/home/dev/.config/agent-gateway/credentials/chatgpt/auth.json",

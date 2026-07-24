@@ -1,6 +1,7 @@
 """Live smoke tests — require REAL provider OAuth. Skipped unless run with `-m live`.
 
-    uv run agw setup && uv run agw auth chatgpt
+    uv run agw setup
+    uv run agw auth <provider>  # chatgpt or copilot for every enabled model
     uv run pytest tests/manual -m live -v
 
 These exercise the one thing the offline suite cannot: a real upstream response through

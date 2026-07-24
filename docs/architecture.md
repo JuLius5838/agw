@@ -20,7 +20,7 @@
               ┌─────────────▼──────────────┐         supervisor
               │ private LiteLLM :free-port  │◀──────── sanitized 0600 log
               └──────────────┬───────────────┘
-                         ChatGPT/Codex OAuth
+                       provider-isolated OAuth
 ```
 
 ## Module map (`src/agent_gateway/`)
@@ -36,7 +36,7 @@
 | `model_registry.py` | Typed external mappings, optional native default, hidden picker IDs. |
 | `litellm_config.py` | Deterministic LiteLLM config rendering + fingerprint. |
 | `litellm_runner.py` | Pinned compatibility entry point: routes ChatGPT through LiteLLM's existing Responses adapter. |
-| `providers/` | `Provider` enum + prefixes; ChatGPT/Codex auth adapter over LiteLLM. |
+| `providers/` | `Provider` enum + prefixes; isolated ChatGPT/Codex and GitHub Copilot auth adapters over LiteLLM. |
 | `auth.py` | Auth orchestration: stage → probe → atomic swap; TTY gate; preserve-on-cancel. |
 | `process.py` | PID+create_time process identity (reuse-safe); port helpers. |
 | `proxy.py` | Lifecycle: ensure/reuse/stop/restart; reuse classification; readiness. |
@@ -59,6 +59,10 @@
   Anthropic↔Responses adapter but omits `chatgpt` from its dispatch set. The AGW runner
   extends that pinned set before starting the normal LiteLLM CLI, so Claude system content
   is sent as Responses `instructions`.
+- **Copilot uses LiteLLM's native provider adapter.** `copilot` registry entries must use
+  `github_copilot/` upstream IDs and an independent `GITHUB_COPILOT_TOKEN_DIR`. Device login
+  stages only a GitHub access token; `agw models verify` performs the entitlement exchange
+  and is required before compatibility is claimed for an exact model.
 - **Reuse is HTTP-free.** A proxy is reused when its recorded supervisor, router, and
   optional LiteLLM
   identities are alive, the runtime/config fingerprint matches, and the socket is

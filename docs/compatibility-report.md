@@ -38,13 +38,21 @@ credentials or network access:
   maps Claude system content to `instructions`, but its provider allowlist omits
   `chatgpt`. AGW's pinned runner adds only that provider before invoking LiteLLM's normal
   CLI; a compatibility test fails if the internal surface changes.
+- ✅ **Copilot adapter registration.** LiteLLM 1.93.0 ships a `github_copilot` OAuth
+  authenticator keyed by `GITHUB_COPILOT_TOKEN_DIR`, uses `access-token` plus a derived
+  `api-key.json`, and has a cataloged `github_copilot/gpt-4.1` chat entry. AGW restores that
+  provider behind an isolated adapter and a disabled candidate. The pinned catalog has no
+  Kimi entry, so AGW does not publish or infer a Kimi slug.
 
 ## Key provider finding
 
-LiteLLM's `chatgpt/` provider can enter an interactive device-code flow when it starts
-without a valid token. AGW therefore validates every enabled external provider before
-starting the private LiteLLM child and applies a bounded readiness timeout. With no enabled
-external model, LiteLLM is intentionally absent and native Claude remains usable.
+LiteLLM's `chatgpt/` and `github_copilot/` providers can enter interactive device-code
+flows when called without valid tokens. AGW therefore validates every enabled external
+provider before starting the private LiteLLM child and applies a bounded readiness timeout.
+The Copilot offline auth probe confirms only that device login produced a non-empty GitHub
+access token; subscription entitlement and the derived API-key exchange are intentionally
+left to the live `agw models verify` call. With no enabled external model, LiteLLM is
+intentionally absent and native Claude remains usable.
 
 Claude is not configured as a LiteLLM provider. The front router forwards native requests
 directly with Claude Code's request-time saved-login headers; AGW has no `auth anthropic`
@@ -72,6 +80,8 @@ Real subscription flows are deliberately `live`-marked and are not part of offli
       usage and subscription accounting.
 - [ ] End-to-end ChatGPT/Codex response through `/v1/messages`, including streaming, tools,
       and the single custom picker entry on the pinned Claude Code version.
+- [ ] `agw auth copilot`, derived entitlement exchange, and an end-to-end
+      `github_copilot/gpt-4.1` response under a real Copilot subscription.
 - [ ] `agw models verify` full Anthropic-protocol contract against each real external
       upstream.
 - [ ] Per-task subagent and agent-team routing with agent-ID-correlated evidence.

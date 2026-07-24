@@ -24,7 +24,7 @@ app = typer.Typer(
     name=APP_NAME,
     help=(
         "Agent Gateway — keep native Claude subscription routing while adding "
-        "ChatGPT/Codex models to Claude Code."
+        "ChatGPT/Codex and GitHub Copilot models to Claude Code."
     ),
     no_args_is_help=True,
     add_completion=False,

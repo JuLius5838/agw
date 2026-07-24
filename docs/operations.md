@@ -5,7 +5,7 @@
 | Command | Purpose |
 |---------|---------|
 | `agw setup [--default-model M] [--provider-owner M=P] [--agent-teams/--no-agent-teams] [--enable-shell SHELL\|--no-shell]` | Install local state, resolve models, persist choices. Non-destructive; idempotent. |
-| `agw auth chatgpt [--model M] [--force]` | Authenticate a ChatGPT/Codex subscription (needs a TTY). Claude authentication remains in native Claude Code. |
+| `agw auth chatgpt\|copilot [--model M] [--force]` | Authenticate a ChatGPT/Codex or GitHub Copilot subscription (needs a TTY). Claude authentication remains in native Claude Code. |
 | `agw models list [--all] [--json]` | Active models (with `--all`, inactive candidates too). |
 | `agw models add NAME [-p PROVIDER] [-u UPSTREAM] [-m responses\|chat] [--display-name L] [--no-enable] [--default]` | Append a validated model to the registry. Provider defaults to `chatgpt` and upstream to `chatgpt/NAME`. Never overwrites an existing name+provider. |
 | `agw models remove NAME [-p PROVIDER]` | Remove a model from the registry; clears `default_model` if it no longer resolves. `--provider` disambiguates a name with multiple candidates. |
@@ -27,7 +27,8 @@ Exit codes: `0` ok · `1` general · `3` config · `4` auth · `5` model-unavail
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap.sh"   # install runtime + agw setup
 agw setup --provider-owner gpt-5.6-sol=chatgpt      # enable one exact external route
-agw auth chatgpt                                    # only if a ChatGPT model is enabled
+agw auth chatgpt                                    # if a ChatGPT model is enabled
+agw auth copilot                                   # if a Copilot model is enabled
 claude                                              # native default; one external picker entry available
 ```
 
@@ -62,8 +63,12 @@ External candidates ship disabled. Enable the exact model/provider pair you inte
 agw setup --provider-owner gpt-5.6-sol=chatgpt
 ```
 
-The same option keeps provider selection explicit and leaves room for additional
-subscription backends in a future release.
+Copilot is a second explicit owner for exact names. The packaged `gpt-4.1` candidate is
+verified against LiteLLM 1.93.0's catalog but ships disabled; enable it with
+`agw setup --provider-owner gpt-4.1=copilot`, authenticate with `agw auth copilot`, then
+run `agw models verify gpt-4.1`. Do not add Kimi until its exact Copilot slug is available
+from a live provider catalog or other authoritative source; the pinned LiteLLM catalog does
+not contain one.
 
 ## Switching models
 
@@ -88,8 +93,8 @@ provider route, setup stores the original registry at
 
 | Symptom | Action |
 |---------|--------|
-| `provider not authenticated` | Enable only the external model you need, then run `agw auth chatgpt` |
-| `legacy copilot creds` | Copilot support is removed. Review and delete `~/.config/agent-gateway/credentials/copilot/`, or run `agw uninstall --credentials` to remove every stored provider credential. |
+| `provider not authenticated` | Enable only the external model you need, then run `agw auth chatgpt` or `agw auth copilot` for its selected provider. |
+| Copilot OAuth succeeds but model verification fails | Confirm the exact slug and mode, subscription entitlement, and provider policy; there is no fallback. |
 | `port … held by an unrelated process` | free the port or change `port` in `~/.config/agent-gateway/config.yaml`, then `agw proxy restart` |
 | `proxy running with a different config/version` | `agw proxy restart` |
 | `did not become ready within 10s` | check `agw logs`; usually an unauthenticated provider |

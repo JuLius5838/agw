@@ -48,6 +48,28 @@ def test_render_uses_public_name_and_prefixed_upstream():
     assert by_name["gpt-5.3-codex"]["model_info"]["mode"] == "responses"
 
 
+def test_copilot_route_keeps_exact_public_name_and_private_prefix():
+    reg = load_registry_text(
+        """
+        default_model: gpt-4.1
+        models:
+          - name: gpt-4.1
+            provider: copilot
+            upstream_model: github_copilot/gpt-4.1
+            mode: chat
+            enabled: true
+        """
+    )
+    doc = yaml.safe_load(render_litellm_config(reg))
+    assert doc["model_list"] == [
+        {
+            "model_name": "gpt-4.1",
+            "litellm_params": {"model": "github_copilot/gpt-4.1"},
+            "model_info": {"mode": "chat"},
+        }
+    ]
+
+
 def test_only_active_models_rendered_sorted_by_name():
     reg = load_registry_text(REGISTRY)
     doc = yaml.safe_load(render_litellm_config(reg))

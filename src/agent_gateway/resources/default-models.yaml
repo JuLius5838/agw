@@ -7,12 +7,14 @@
 # Native Claude models keep Claude Code's saved subscription login and bypass
 # LiteLLM. This registry contains only optional external subscription backends:
 #   - chatgpt → ChatGPT/Codex (`agw auth chatgpt`)
+#   - copilot → GitHub Copilot (`agw auth copilot`)
 #
 # Rules enforced by `agw` validation:
 #   - `name` is the EXACT routable model name (no provider prefix).
 #   - `display_name` is an optional picker-only label; it never changes routing.
 #   - `upstream_model` MUST start with its provider's prefix:
 #       chatgpt/         for provider: chatgpt
+#       github_copilot/  for provider: copilot
 #   - `mode` is `responses` or `chat` and must match the upstream model.
 #   - Exactly ONE active (`enabled: true`) entry per public `name`.
 #   - `default_model` is null to retain Claude's native startup default, or names
@@ -46,4 +48,13 @@ models:
     provider: chatgpt
     upstream_model: chatgpt/gpt-5.6-luna
     mode: responses
+    enabled: false
+
+  # GitHub Copilot — this slug and chat mode are present in LiteLLM 1.93.0's
+  # pinned catalog. Confirm account access with `agw models verify` before use.
+  - name: gpt-4.1
+    display_name: GPT 4.1 (Copilot)
+    provider: copilot
+    upstream_model: github_copilot/gpt-4.1
+    mode: chat
     enabled: false

@@ -132,6 +132,38 @@ def test_default_unknown_rejected():
         load_registry_text(text)
 
 
+def test_copilot_prefix_is_validated():
+    reg = load_registry_text(
+        textwrap.dedent(
+            """
+            default_model: gpt-4.1
+            models:
+              - name: gpt-4.1
+                provider: copilot
+                upstream_model: github_copilot/gpt-4.1
+                mode: chat
+                enabled: true
+            """
+        )
+    )
+    assert reg.get_active("gpt-4.1").provider is Provider.copilot
+
+    with pytest.raises(ConfigError, match="github_copilot/"):
+        load_registry_text(
+            textwrap.dedent(
+                """
+                default_model: gpt-4.1
+                models:
+                  - name: gpt-4.1
+                    provider: copilot
+                    upstream_model: chatgpt/gpt-4.1
+                    mode: chat
+                    enabled: true
+                """
+            )
+        )
+
+
 def test_invalid_prefix_rejected():
     text = textwrap.dedent(
         """
@@ -219,15 +251,19 @@ def test_packaged_default_registry_is_valid():
     reg = load_default_registry()
     assert reg.default_entry() is None
     assert not reg.active_models()
-    assert {entry.name for entry in reg.inactive_models()} == {
-        "gpt-5.6-sol",
-        "gpt-5.6-terra",
-        "gpt-5.6-luna",
+    assert {(entry.name, entry.provider.value) for entry in reg.inactive_models()} == {
+        ("gpt-5.6-sol", "chatgpt"),
+        ("gpt-5.6-terra", "chatgpt"),
+        ("gpt-5.6-luna", "chatgpt"),
+        ("gpt-4.1", "copilot"),
     }
-    assert {entry.name: entry.display_name for entry in reg.inactive_models()} == {
-        "gpt-5.6-sol": "GPT 5.6 Sol",
-        "gpt-5.6-terra": "GPT 5.6 Terra",
-        "gpt-5.6-luna": "GPT 5.6 Luna",
+    assert {
+        (entry.name, entry.provider.value): entry.display_name for entry in reg.inactive_models()
+    } == {
+        ("gpt-5.6-sol", "chatgpt"): "GPT 5.6 Sol",
+        ("gpt-5.6-terra", "chatgpt"): "GPT 5.6 Terra",
+        ("gpt-5.6-luna", "chatgpt"): "GPT 5.6 Luna",
+        ("gpt-4.1", "copilot"): "GPT 4.1 (Copilot)",
     }
 
 
@@ -435,9 +471,6 @@ def test_remove_model_unknown_raises():
 
 
 def test_remove_model_ambiguous_across_providers_requires_provider():
-    # Raw registry with the same name under two providers. The ambiguity guard
-    # runs on the raw document before the final whole-registry validation, so it
-    # does not depend on both providers being current enum members.
     text = textwrap.dedent(
         """
         default_model: null
@@ -456,6 +489,12 @@ def test_remove_model_ambiguous_across_providers_requires_provider():
     )
     with pytest.raises(ConfigError, match="multiple provider candidates"):
         remove_model_from_registry_text(text, name="shared")
+
+    result = remove_model_from_registry_text(text, name="shared", provider=Provider.copilot)
+    reg = load_registry_text(result)
+    assert {(entry.name, entry.provider) for entry in reg.inactive_models()} == {
+        ("shared", Provider.chatgpt)
+    }
 
 
 def test_remove_model_removes_all_same_name_entries_for_one_provider():

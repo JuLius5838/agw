@@ -2,18 +2,18 @@
 name: gateway-setup
 description: >-
   Install and set up the Agent Gateway so Claude Code can use the developer's
-  personal ChatGPT/Codex subscription as its model backend.
+  personal ChatGPT/Codex or GitHub Copilot subscription as a model backend.
   Use when the user says things like "set up the agent gateway", "install agw",
   "let me use my ChatGPT/Codex subscription in Claude Code", "use Codex as the
-  backend". Runs a bundled bootstrap that installs the pinned `agw` runtime with
-  uv, then runs `agw setup`.
+  backend", or "use Copilot models". Runs a bundled bootstrap that installs the
+  pinned `agw` runtime with uv, then runs `agw setup`.
 ---
 
 # Agent Gateway — setup
 
 Set up the local hybrid gateway. Native Claude requests retain Claude Code's saved
-subscription; configured ChatGPT/Codex names route through a private per-developer
-LiteLLM process.
+subscription; configured ChatGPT/Codex or GitHub Copilot names route through a private
+per-developer LiteLLM process.
 
 ## What to do
 
@@ -51,6 +51,7 @@ LiteLLM process.
 
    ```bash
    agw auth chatgpt     # ChatGPT / Codex subscription
+   agw auth copilot    # GitHub Copilot subscription
    ```
 
    The short-lived verification URL/code appears only on the terminal. Never copy

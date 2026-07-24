@@ -62,11 +62,11 @@ def test_unknown_command_is_nonzero() -> None:
     assert result.returncode != 0
 
 
-def test_auth_help_lists_only_supported_provider() -> None:
+def test_auth_help_lists_supported_providers() -> None:
     result = _run_module("auth", "--help")
     assert result.returncode == 0
     assert "chatgpt" in result.stdout
-    assert "copilot" not in result.stdout
+    assert "copilot" in result.stdout
 
 
 def test_version_reports_semver() -> None:
@@ -202,6 +202,40 @@ def test_models_add_and_remove_roundtrip(tmp_path) -> None:
 
     # Removing an unknown model is a clean model-unavailable failure, not a crash.
     assert run("models", "remove", "gpt-5.6-example").returncode == ExitCode.MODEL_UNAVAILABLE
+
+
+def test_models_add_and_remove_copilot_roundtrip(tmp_path) -> None:
+    env = _isolated_env(tmp_path, native_claude=True)
+
+    def run(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "-m", "agent_gateway", *args],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    assert run("setup").returncode == 0
+    added = run(
+        "models",
+        "add",
+        "gpt-5.3-codex",
+        "--provider",
+        "copilot",
+        "--mode",
+        "responses",
+    )
+    assert added.returncode == 0, added.stderr
+
+    doc = json.loads(run("models", "list", "--all", "--json").stdout)
+    candidate = next(model for model in doc["models"] if model["name"] == "gpt-5.3-codex")
+    assert candidate["provider"] == "copilot"
+    assert candidate["mode"] == "responses"
+    models_file = tmp_path / ".config" / "agent-gateway" / "models.yaml"
+    assert "upstream_model: github_copilot/gpt-5.3-codex" in models_file.read_text()
+
+    removed = run("models", "remove", "gpt-5.3-codex", "--provider", "copilot")
+    assert removed.returncode == 0, removed.stderr
 
 
 def test_usage_json_degrades_cleanly_without_provider_auth(tmp_path) -> None:

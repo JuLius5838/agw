@@ -37,8 +37,7 @@ _CUSTOM_MODEL_VARS = (
 
 # Variables that locate external-provider credentials (and the internal proxy
 # master key). The managed LiteLLM child needs these; the native Claude child
-# must never inherit them, even if the surrounding shell exported one — including
-# the retired Copilot variable left over from an earlier install.
+# must never inherit them, even if the surrounding shell exported one.
 _PROVIDER_SECRET_VARS = (
     "CHATGPT_TOKEN_DIR",
     "CHATGPT_AUTH_FILE",

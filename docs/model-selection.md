@@ -4,7 +4,7 @@
 
 - **Names are real model names.** You and Claude always route with the exact public name
   (e.g. `gpt-5.6-sol`, `claude-opus-4-8`). Provider prefixes (`anthropic/`,
-  `chatgpt/`) are private routing detail and never appear in prompts.
+  `chatgpt/`, `github_copilot/`) are private routing detail and never appear in prompts.
 - **Picker labels are cosmetic.** An optional `display_name` can make the visual picker
   friendlier without becoming a routable alias.
 - **One provider per name per machine.** A public name maps to exactly one active provider.
@@ -20,6 +20,7 @@ registry contains only optional external routes:
 | provider | prefix | subscription auth |
 |----------|--------|-------------------|
 | `chatgpt` | `chatgpt/` | `agw auth chatgpt` (OAuth device flow) |
+| `copilot` | `github_copilot/` | `agw auth copilot` (OAuth device flow) |
 
 The front router sends native Claude names directly to Anthropic and sends only exact
 external names to LiteLLM. It exposes discovery-compatible hidden `anthropic.agw.*` IDs
@@ -58,11 +59,19 @@ models:
     upstream_model: chatgpt/gpt-5.6-luna
     mode: responses
     enabled: true
+
+  - name: gpt-4.1
+    display_name: GPT 4.1 (Copilot)
+    provider: copilot
+    upstream_model: github_copilot/gpt-4.1
+    mode: chat
+    enabled: false
 ```
 
-With this registry, all three external names are selectable, while `claude` still starts
-with Claude Code's native model because `default_model` is `null`. Set `default_model` to
-one enabled external name only if `claude` should start on that model by default.
+With this registry, the three enabled ChatGPT names are selectable and the Copilot
+candidate remains unavailable, while `claude` still starts with Claude Code's native model
+because `default_model` is `null`. Set `default_model` to one enabled external name only if
+`claude` should start on that model by default.
 
 Validation enforces: exact-name (no `/`), provider-prefix match, valid mode, one active
 entry per name, and—when set—that `default_model` resolves to an active external entry.
@@ -87,13 +96,20 @@ agw models add gpt-5.6-luna                 # provider chatgpt, upstream chatgpt
 agw models add gpt-5.6-luna --no-enable     # add as a disabled candidate
 agw models add gpt-5.6-luna --default       # also make it the startup model (implies enable)
 agw models add my-model -u chatgpt/actual-slug --display-name "My Model"
+agw models add gpt-4.1 -p copilot -m chat   # upstream defaults to github_copilot/gpt-4.1
 agw models remove gpt-5.6-luna              # -p/--provider disambiguates a shared name
 ```
 
+The default `--mode responses` is appropriate for ChatGPT/Codex models but is not inferred
+from a provider catalog. Pass the mode published for the exact Copilot slug (`chat` for the
+packaged `gpt-4.1` candidate). Never invent a Copilot slug: LiteLLM 1.93.0's pinned catalog
+contains `github_copilot/gpt-4.1`, but it does not contain a Kimi model ID, so Kimi must not
+be added until an exact slug is obtained and live-tested.
+
 `add` never overwrites an existing name+provider, and `remove` clears `default_model` when
 the removed name no longer resolves. Neither restarts the gateway — run `agw proxy restart`
-to apply the change to a running session, and `agw models verify NAME` (after
-`agw auth chatgpt`) to confirm a newly enabled model actually works.
+to apply the change to a running session, and `agw models verify NAME` (after authenticating
+the selected provider) to confirm a newly enabled model actually works.
 
 To rename the picker entry, edit only `display_name` in
 `~/.config/agent-gateway/models.yaml`, then start a new `claude` session. Keep `name` and

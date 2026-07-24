@@ -1,11 +1,11 @@
 ---
 name: gateway-add-model
 description: >-
-  Add or remove an external ChatGPT/Codex model in Agent Gateway so it becomes
-  selectable in Claude Code. Use when the user says things like "add gpt-5.6-luna",
-  "enable a new model", "make <model> available in the gateway", or "remove
-  <model>". Uses the validated `agw models add` / `agw models remove` commands and
-  never hand-edits the routing registry or invents model ids.
+  Add or remove an external ChatGPT/Codex or GitHub Copilot model in Agent Gateway
+  so it becomes selectable in Claude Code. Use when the user says things like "add
+  gpt-5.6-luna", "enable a Copilot model", "make <model> available in the gateway",
+  or "remove <model>". Uses the validated `agw models add` / `agw models remove`
+  commands and never hand-edits the routing registry or invents model ids.
 ---
 
 # Agent Gateway — add or remove a model
@@ -23,9 +23,11 @@ the gateway never falls back to a different model.
      ```bash
      agw models list --all
      ```
-   - If the requested model is not listed, obtain its exact ChatGPT/Codex slug from
-     the user or the Codex CLI's model list. If you cannot confirm the exact id,
-     stop and ask — do not guess.
+   - For ChatGPT/Codex, obtain the exact slug from the user or the Codex CLI's model
+     list. For Copilot, use an authoritative current Copilot/LiteLLM catalog or an
+     exact slug supplied by the user. If you cannot confirm the exact id, stop and
+     ask — do not guess. In particular, LiteLLM 1.93.0 has no cataloged Kimi slug;
+     a product display name alone is not a routable id.
 
 2. **Add it.** For a ChatGPT/Codex model the provider, upstream id, and mode default
    correctly, so the common case is just the exact name:
@@ -34,12 +36,20 @@ the gateway never falls back to a different model.
    agw models add gpt-5.6-luna
    ```
 
+   For a verified Copilot slug, make the provider and published mode explicit. The
+   upstream prefix defaults to `github_copilot/` when `-p copilot` is selected:
+
+   ```bash
+   agw models add gpt-4.1 --provider copilot --mode chat
+   ```
+
    Options when needed:
    - `--display-name "GPT 5.6 Luna"` — picker label only; never changes routing.
    - `--no-enable` — add as a disabled candidate instead of activating it.
    - `--default` — also make it the startup model (implies enable).
-   - `--provider`, `--upstream-model`, `--mode` — only for a non-default provider or
-     a slug that differs from `chatgpt/<name>`.
+   - `--provider`, `--upstream-model`, `--mode` — required when the provider, slug,
+     or API mode differs from the ChatGPT defaults. Never infer mode from provider
+     alone; use the exact model's published/cataloged mode.
 
    The command validates the whole registry before writing; an invalid entry
    (bad name, wrong prefix, duplicate active name) fails without changing the file.
@@ -47,7 +57,8 @@ the gateway never falls back to a different model.
 3. **Authenticate the provider** if it is not already:
 
    ```bash
-   agw auth chatgpt
+   agw auth chatgpt     # ChatGPT/Codex
+   agw auth copilot    # GitHub Copilot
    ```
 
 4. **Verify Claude compatibility.** A model that fails here is unusable under that

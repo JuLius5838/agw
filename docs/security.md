@@ -5,7 +5,7 @@ a shell startup file. This document records the threats it defends against and h
 
 ## Assets
 
-- **Provider OAuth tokens** (ChatGPT/Codex) under
+- **Provider OAuth tokens** (ChatGPT/Codex and GitHub Copilot) under
   `~/.config/agent-gateway/credentials/<provider>/`.
 - **Local proxy key** (`credentials/proxy-key`) — a loopback credential that
   authenticates Claude Code to the local proxy.
@@ -29,13 +29,15 @@ a shell startup file. This document records the threats it defends against and h
 | T12 | Config drift under an active session | A changed runtime/config fingerprint fails new launches with an explicit `agw proxy restart`; it never restarts under a running session implicitly. |
 | T13 | Claude credentials reach an external provider | The front router strips `Authorization` and `x-api-key` before an external request and injects only the private LiteLLM key; provider token directories are removed from the router environment. |
 | T14 | Unified usage leaks session/provider credentials | Claude capture allowlists only `rate_limits.five_hour` and `rate_limits.seven_day`. Codex App Server receives the AGW token over stdin (never argv) only after a tested-version gate, in a `0700` temporary `CODEX_HOME` destroyed after the account RPCs. Its child environment is rebuilt from a minimal non-secret/runtime-network allowlist instead of inheriting Claude/AGW/provider variables. App Server responses are reduced to documented scalar allowlists before rendering/JSON output, and usage never mutates the live credential. |
+| T15 | One external provider reads another provider's credential | ChatGPT and Copilot use separate token directories. Only the managed LiteLLM process receives both directory locators; the public router and native Claude child scrub both. Model routing remains an exact registry mapping with no provider fallback. |
 
 ## Data flow / privacy
 
-Prompts and tool schemas are sent to OpenAI under the developer's ChatGPT/Codex
-account and data policy. This is a compatibility- and policy-gated use of
-LiteLLM's subscription bridge. Native Claude traffic remains direct to Anthropic
-using Claude Code's saved login. See `docs/policy-decision.md`.
+Prompts and tool schemas are sent to the selected external provider: OpenAI under the
+developer's ChatGPT/Codex account, or a model exposed by the developer's GitHub Copilot
+subscription under GitHub's applicable terms and data policy. These are compatibility- and
+policy-gated uses of LiteLLM subscription bridges. Native Claude traffic remains direct to
+Anthropic using Claude Code's saved login. See `docs/policy-decision.md`.
 
 ## Update & rollback
 
@@ -44,5 +46,6 @@ repository change that bumps both the plugin and runtime versions. Rollback pins
 the prior marketplace/plugin version, reinstalls the prior runtime, and restarts
 the managed proxy; it never rolls back or copies OAuth credentials. When a
 provider is retired, setup removes its model routes but does not silently delete
-its stored OAuth material; `agw doctor` reports the legacy directory and its
-cleanup options.
+its stored OAuth material. Copilot is supported again; an existing
+`credentials/copilot` directory is treated as its active credential store and is checked
+normally by `agw doctor`.

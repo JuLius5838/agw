@@ -6,8 +6,12 @@ compromised. These must never be the installed or locked version.
 
 from __future__ import annotations
 
+import inspect
 from importlib.metadata import version
 from pathlib import Path
+
+from litellm import model_cost
+from litellm.llms.github_copilot.authenticator import Authenticator
 
 FORBIDDEN_LITELLM = {"1.82.7", "1.82.8"}
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -26,3 +30,12 @@ def test_lockfile_pins_no_forbidden_litellm() -> None:
 def test_pyproject_pins_litellm_with_proxy_extra() -> None:
     pyproject = (REPO_ROOT / "pyproject.toml").read_text()
     assert "litellm[proxy]==" in pyproject  # pinned, exact, with proxy extra
+
+
+def test_pinned_litellm_exposes_expected_copilot_contract() -> None:
+    assert version("litellm") == "1.93.0"
+    source = inspect.getsource(Authenticator.__init__)
+    assert "GITHUB_COPILOT_TOKEN_DIR" in source
+    assert model_cost["github_copilot/gpt-4.1"]["mode"] == "chat"
+    # A product display name is not enough to route; never silently add a guessed Kimi slug.
+    assert not any(key.startswith("github_copilot/kimi") for key in model_cost)
