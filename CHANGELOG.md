@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses a single version for
 the plugin and the runtime, bumped together on every release.
 
-## [Unreleased]
+## [0.3.0] - 2026-07-24
 
 ### Added
 - `agw models add NAME` and `agw models remove NAME`: validated registry edits that
