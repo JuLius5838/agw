@@ -35,6 +35,7 @@ _NATIVE_READY_WAIT_SECONDS = 15.0
 _NATIVE_DIALOG_WAIT_SECONDS = 300.0
 _NATIVE_ABORT_ACK_WAIT_SECONDS = 1.0
 _TERMINAL_FALLBACK_WAIT_SECONDS = 300.0
+_GUARD_TOTAL_WAIT_SECONDS = 320.0
 _MCP_CLAIM_WAIT_SECONDS = 0.25
 
 
@@ -170,8 +171,10 @@ def run_usage_guard(
     report_builder: Callable[[Paths], dict[str, object]] = build_usage_report,
     wait_seconds: float = _GUARD_WAIT_SECONDS,
     dialog_wait_seconds: float = _NATIVE_DIALOG_WAIT_SECONDS,
+    total_wait_seconds: float = _GUARD_TOTAL_WAIT_SECONDS,
 ) -> str:
     """Fail closed and render a local fallback if the native MCP hook is unavailable."""
+    overall_deadline = time.monotonic() + max(0.0, total_wait_seconds)
     try:
         return _run_usage_guard(
             payload,
@@ -179,9 +182,10 @@ def run_usage_guard(
             report_builder=report_builder,
             wait_seconds=wait_seconds,
             dialog_wait_seconds=dialog_wait_seconds,
+            overall_deadline=overall_deadline,
         )
     except Exception:  # noqa: BLE001 - a hook failure must never reach the model
-        return _guard_fallback_result(paths, report_builder)
+        return _guard_fallback_result(paths, report_builder, overall_deadline)
 
 
 def _run_usage_guard(
@@ -191,6 +195,7 @@ def _run_usage_guard(
     report_builder: Callable[[Paths], dict[str, object]],
     wait_seconds: float,
     dialog_wait_seconds: float,
+    overall_deadline: float,
 ) -> str:
     """Coordinate exclusive ownership between the native and terminal UIs."""
     try:
@@ -206,9 +211,13 @@ def _run_usage_guard(
     with _ui_lock(paths, session_id):
         _write_ui_state(paths, session_id, token=token, status="pending")
 
-    claim_deadline = time.monotonic() + max(0.0, wait_seconds)
-    ready_deadline = time.monotonic() + _NATIVE_READY_WAIT_SECONDS
-    dialog_deadline = time.monotonic() + max(0.0, dialog_wait_seconds)
+    now = time.monotonic()
+    claim_deadline = min(now + max(0.0, wait_seconds), overall_deadline)
+    ready_deadline = min(now + _NATIVE_READY_WAIT_SECONDS, overall_deadline)
+    dialog_deadline = min(
+        now + max(0.0, dialog_wait_seconds),
+        overall_deadline - _NATIVE_ABORT_ACK_WAIT_SECONDS,
+    )
     abort_ack_deadline: float | None = None
     while True:
         with _ui_lock(paths, session_id):
@@ -227,7 +236,10 @@ def _run_usage_guard(
             now = time.monotonic()
             if status == "native_expired":
                 if abort_ack_deadline is None:
-                    abort_ack_deadline = now + _NATIVE_ABORT_ACK_WAIT_SECONDS
+                    abort_ack_deadline = min(
+                        now + _NATIVE_ABORT_ACK_WAIT_SECONDS,
+                        overall_deadline,
+                    )
                 if now >= abort_ack_deadline:
                     return _hook_block_result(
                         "AGW closed an unresponsive usage dialog. Run /agw-usage again."
@@ -239,7 +251,10 @@ def _run_usage_guard(
                     token=token,
                     status="native_expired",
                 )
-                abort_ack_deadline = now + _NATIVE_ABORT_ACK_WAIT_SECONDS
+                abort_ack_deadline = min(
+                    now + _NATIVE_ABORT_ACK_WAIT_SECONDS,
+                    overall_deadline,
+                )
                 continue
             should_fallback = status == "native_failed"
             should_fallback = should_fallback or (
@@ -248,6 +263,7 @@ def _run_usage_guard(
             should_fallback = should_fallback or (
                 status == "native_claimed" and now >= ready_deadline
             )
+            should_fallback = should_fallback or now >= overall_deadline
             if should_fallback:
                 _write_ui_state(
                     paths,
@@ -258,15 +274,25 @@ def _run_usage_guard(
                 break
         time.sleep(0.025)
 
-    return _guard_fallback_result(paths, report_builder)
+    return _guard_fallback_result(paths, report_builder, overall_deadline)
 
 
 def _guard_fallback_result(
     paths: Paths,
     report_builder: Callable[[Paths], dict[str, object]],
+    overall_deadline: float,
 ) -> str:
+    report = _build_report_before_deadline(paths, report_builder, overall_deadline)
+    remaining = min(
+        _TERMINAL_FALLBACK_WAIT_SECONDS,
+        max(0.0, overall_deadline - time.monotonic()),
+    )
     try:
-        shown = _show_terminal_fallback(report_builder(paths))
+        shown = (
+            report is not None
+            and remaining > 0
+            and _show_terminal_fallback(report, wait_seconds=remaining)
+        )
     except Exception:  # noqa: BLE001 - this guard must fail closed
         shown = False
     if shown:
@@ -275,6 +301,31 @@ def _guard_fallback_result(
         "AGW blocked this command because its local usage UI could not open. "
         "Run `agw usage` in the terminal."
     )
+
+
+def _build_report_before_deadline(
+    paths: Paths,
+    report_builder: Callable[[Paths], dict[str, object]],
+    deadline: float,
+) -> dict[str, object] | None:
+    """Collect provider usage without allowing a stalled collector to outlive the hook."""
+    results: queue.Queue[dict[str, object] | None] = queue.Queue(maxsize=1)
+
+    def build() -> None:
+        try:
+            results.put(report_builder(paths))
+        except Exception:  # noqa: BLE001 - the guard reports fallback failure
+            results.put(None)
+
+    threading.Thread(
+        target=build,
+        name="agw-usage-report",
+        daemon=True,
+    ).start()
+    try:
+        return results.get(timeout=max(0.0, deadline - time.monotonic()))
+    except queue.Empty:
+        return None
 
 
 def _usage_elicitation(report: dict[str, object]) -> dict[str, object]:
@@ -558,9 +609,13 @@ class ClaudeExtensionServer:
         self.writer.flush()
 
 
-def _show_terminal_fallback(report: dict[str, object]) -> bool:
+def _show_terminal_fallback(
+    report: dict[str, object],
+    *,
+    wait_seconds: float = _TERMINAL_FALLBACK_WAIT_SECONDS,
+) -> bool:
     """Show a same-terminal fallback when the client lacks native elicitation."""
-    if os.name != "posix":
+    if os.name != "posix" or wait_seconds <= 0:
         return False
     try:
         with open("/dev/tty", "r+", encoding="utf-8", buffering=1) as terminal:
@@ -568,7 +623,7 @@ def _show_terminal_fallback(report: dict[str, object]) -> bool:
             terminal.write(render_usage(report))
             terminal.write("\n\nPress Enter or q to return to Claude Code.")
             terminal.flush()
-            deadline = time.monotonic() + _TERMINAL_FALLBACK_WAIT_SECONDS
+            deadline = time.monotonic() + wait_seconds
             while time.monotonic() < deadline:
                 remaining = max(0.0, deadline - time.monotonic())
                 readable, _, _ = select.select([terminal], [], [], remaining)

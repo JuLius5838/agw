@@ -186,7 +186,8 @@ def test_guard_blocks_and_shows_terminal_fallback_when_mcp_is_unavailable(
     paths = get_paths({"HOME": str(tmp_path)})
     shown: list[dict[str, object]] = []
 
-    def show(report: dict[str, object]) -> bool:
+    def show(report: dict[str, object], *, wait_seconds: float) -> bool:
+        assert wait_seconds > 0
         shown.append(report)
         return True
 
@@ -228,6 +229,42 @@ def test_terminal_fallback_timeout_still_blocks_model_call(
         wait_seconds=0,
     )
 
+    assert json.loads(result)["decision"] == "block"
+    assert "Press Enter or q" in terminal.getvalue()
+
+
+def test_guard_absolute_deadline_includes_collection_and_terminal_wait(
+    tmp_path, monkeypatch
+) -> None:
+    paths = get_paths({"HOME": str(tmp_path)})
+
+    class Terminal(io.StringIO):
+        def close(self) -> None:
+            pass
+
+    terminal = Terminal()
+
+    def slow_report(_paths):
+        time.sleep(0.03)
+        return _report()
+
+    def no_input(_readers, _writers, _errors, timeout):
+        time.sleep(timeout)
+        return [], [], []
+
+    monkeypatch.setattr(extension, "open", lambda *_args, **_kwargs: terminal, raising=False)
+    monkeypatch.setattr(select, "select", no_input)
+    started = time.monotonic()
+    result = extension.run_usage_guard(
+        json.dumps({"session_id": "absolute-timeout"}),
+        paths,
+        report_builder=slow_report,
+        wait_seconds=0,
+        total_wait_seconds=0.08,
+    )
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.2
     assert json.loads(result)["decision"] == "block"
     assert "Press Enter or q" in terminal.getvalue()
 
@@ -466,7 +503,8 @@ def test_delayed_mcp_cannot_open_after_fallback_claims_ui(
     fallback_started = threading.Event()
     release_fallback = threading.Event()
 
-    def show(_report: dict[str, object]) -> bool:
+    def show(_report: dict[str, object], *, wait_seconds: float) -> bool:
+        assert wait_seconds > 0
         fallback_started.set()
         assert release_fallback.wait(timeout=2)
         return True
@@ -500,7 +538,8 @@ def test_native_failure_transfers_ui_ownership_to_guard(
     paths = get_paths({"HOME": str(tmp_path)})
     shown: list[dict[str, object]] = []
 
-    def show(report: dict[str, object]) -> bool:
+    def show(report: dict[str, object], *, wait_seconds: float) -> bool:
+        assert wait_seconds > 0
         shown.append(report)
         return True
 
@@ -554,7 +593,8 @@ def test_guard_still_blocks_if_coordination_storage_fails(
     def broken_lock(_paths, _session_id):
         raise OSError("state directory unavailable")
 
-    def show(report: dict[str, object]) -> bool:
+    def show(report: dict[str, object], *, wait_seconds: float) -> bool:
+        assert wait_seconds > 0
         shown.append(report)
         return True
 

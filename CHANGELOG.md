@@ -12,6 +12,10 @@ the plugin and the runtime, bumped together on every release.
   and the tool response is written before blocking slash-command expansion,
   so Claude does not cancel and strand the companion server after the first
   Close.
+- ChatGPT/Codex Web Search requests now normalize Anthropic's generic
+  `tool_choice` values to the scalar form required by the OpenAI Responses API.
+- `/agw-usage` coordination, provider collection, native UI, and terminal
+  fallback now share one bounded deadline below Claude Code's hook timeout.
 
 ### Added
 - `agw` runtime and Claude Code plugin: route Claude Code through a per-developer,
@@ -57,7 +61,7 @@ the plugin and the runtime, bumped together on every release.
   report (Gate A), and policy-decision record.
 
 ### Pinned
-- Agent Gateway `0.1.7`; LiteLLM `1.93.0`; Python `3.12`; minimum Claude Code
+- Agent Gateway `0.1.8`; LiteLLM `1.93.0`; Python `3.12`; minimum Claude Code
   `2.1.211` (tested on `2.1.218`).
 
 ### Notes
