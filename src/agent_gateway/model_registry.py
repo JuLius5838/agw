@@ -8,8 +8,7 @@ the hybrid-router invariants:
   * ``display_name`` is an optional picker-only label and never affects routing.
   * ``upstream_model`` starts with its provider's prefix.
   * ``mode`` is ``responses`` or ``chat``.
-  * exactly one *active* entry per public name (inactive candidates from another
-    provider are allowed, e.g. a duplicate awaiting an owner decision).
+  * exactly one *active* entry per public name.
   * ``default_model`` is optional; without it Claude Code keeps its native default.
   * picker ids use an internal ``anthropic.agw.*`` prefix solely to pass Claude
     Code's gateway discovery filter.

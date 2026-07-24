@@ -125,7 +125,6 @@ def test_agent_teams_opt_in_controls_flag():
 def test_provider_token_dirs_never_leak_into_child_env():
     env = _env()
     assert "CHATGPT_TOKEN_DIR" not in env
-    assert "GITHUB_COPILOT_TOKEN_DIR" not in env
 
 
 def test_inherited_anthropic_model_removed_when_explicit_flag_given():

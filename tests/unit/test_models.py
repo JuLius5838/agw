@@ -31,10 +31,10 @@ REGISTRY = load_registry_text(
         upstream_model: chatgpt/gpt-5.3-codex
         mode: responses
         enabled: true
-      - name: copilot-gpt
-        provider: copilot
-        upstream_model: github_copilot/copilot-gpt
-        mode: chat
+      - name: gpt-5.6-terra
+        provider: chatgpt
+        upstream_model: chatgpt/gpt-5.6-terra
+        mode: responses
         enabled: false
     """
 )
@@ -54,7 +54,7 @@ def test_list_active_only_by_default():
 
 def test_list_all_includes_inactive():
     names = {i.name for i in list_models(REGISTRY, include_inactive=True)}
-    assert names == {"gpt-5.3-codex", "copilot-gpt"}
+    assert names == {"gpt-5.3-codex", "gpt-5.6-terra"}
 
 
 def test_json_has_stable_schema_and_no_secrets():

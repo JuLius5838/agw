@@ -2,7 +2,7 @@
 
 This is a dependency-light leaf module (stdlib only) so both the CLI and the model
 registry can import :class:`Provider` without pulling in heavier modules. The
-concrete authentication adapters live alongside it (``chatgpt.py``, ``copilot.py``).
+concrete authentication adapter lives alongside it in ``chatgpt.py``.
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ class Provider(StrEnum):
     """
 
     chatgpt = "chatgpt"
-    copilot = "copilot"
 
 
 # The mandatory LiteLLM model prefix for each provider. A model's ``upstream_model``
@@ -26,5 +25,4 @@ class Provider(StrEnum):
 # never appears in a public model name given to Claude Code.
 PROVIDER_PREFIX: dict[Provider, str] = {
     Provider.chatgpt: "chatgpt/",
-    Provider.copilot: "github_copilot/",
 }

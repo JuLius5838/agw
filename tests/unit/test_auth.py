@@ -1,9 +1,9 @@
 """Unit tests for authentication orchestration and provider adapters.
 
 The orchestration (staging, atomic swap, preserve-on-cancel, TTY gate) is tested
-with a fake adapter so no network or real OAuth is involved. The real ChatGPT and
-Copilot adapters are covered only for their pure, offline logic (env construction
-and reading an existing credential); their live device flow is manual-only.
+with a fake adapter so no network or real OAuth is involved. The real ChatGPT
+adapter is covered only for its pure, offline logic (environment construction and
+reading an existing credential); its live device flow is manual-only.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ from agent_gateway.paths import Paths, get_paths
 from agent_gateway.providers import Provider
 from agent_gateway.providers.base import AuthState, AuthStatus, ProviderAdapter
 from agent_gateway.providers.chatgpt import ChatGPTAdapter
-from agent_gateway.providers.copilot import CopilotAdapter
 
 posix_only = pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics")
 
@@ -77,9 +76,11 @@ def test_success_creates_active_credentials(tmp_path):
 
 def test_touches_only_its_own_provider_tree(tmp_path):
     paths = _paths(tmp_path)
+    unrelated = paths.credentials_dir / "other-provider"
+    unrelated.mkdir(parents=True)
     authenticate(paths, FakeAdapter(), isatty=True)
     assert (paths.credentials_dir / "chatgpt").is_dir()
-    assert not (paths.credentials_dir / "copilot").exists()
+    assert unrelated.is_dir()
 
 
 def test_cancel_never_reports_authenticated(tmp_path):
@@ -162,16 +163,4 @@ def test_chatgpt_auth_state_transitions(tmp_path):
 
     # Expired but refreshable -> still usable (LiteLLM refreshes at call time).
     active_file.write_text(json.dumps({"access_token": "x", "expires_at": 1, "refresh_token": "r"}))
-    assert adapter.auth_state(paths).status is AuthStatus.authenticated
-
-
-def test_copilot_process_env_and_state(tmp_path):
-    paths = _paths(tmp_path)
-    adapter = CopilotAdapter()
-    assert adapter.process_env(tmp_path) == {"GITHUB_COPILOT_TOKEN_DIR": str(tmp_path)}
-    assert adapter.auth_state(paths).status is AuthStatus.missing
-
-    active = adapter.active_token_dir(paths)
-    active.mkdir(parents=True)
-    (active / "access-token").write_text("ghu_faketoken")
     assert adapter.auth_state(paths).status is AuthStatus.authenticated

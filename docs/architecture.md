@@ -20,7 +20,7 @@
               ┌─────────────▼──────────────┐         supervisor
               │ private LiteLLM :free-port  │◀──────── sanitized 0600 log
               └──────────────┬───────────────┘
-                         ChatGPT/Copilot OAuth
+                         ChatGPT/Codex OAuth
 ```
 
 ## Module map (`src/agent_gateway/`)
@@ -36,7 +36,7 @@
 | `model_registry.py` | Typed external mappings, optional native default, hidden picker IDs. |
 | `litellm_config.py` | Deterministic LiteLLM config rendering + fingerprint. |
 | `litellm_runner.py` | Pinned compatibility entry point: routes ChatGPT through LiteLLM's existing Responses adapter. |
-| `providers/` | `Provider` enum + prefixes; ChatGPT/Copilot auth adapters over LiteLLM. |
+| `providers/` | `Provider` enum + prefixes; ChatGPT/Codex auth adapter over LiteLLM. |
 | `auth.py` | Auth orchestration: stage → probe → atomic swap; TTY gate; preserve-on-cancel. |
 | `process.py` | PID+create_time process identity (reuse-safe); port helpers. |
 | `proxy.py` | Lifecycle: ensure/reuse/stop/restart; reuse classification; readiness. |

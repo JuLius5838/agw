@@ -5,7 +5,7 @@
 | Command | Purpose |
 |---------|---------|
 | `agw setup [--default-model M] [--provider-owner M=P] [--agent-teams/--no-agent-teams] [--enable-shell SHELL\|--no-shell]` | Install local state, resolve models, persist choices. Non-destructive; idempotent. |
-| `agw auth chatgpt\|copilot [--model M] [--force]` | Authenticate an external subscription (needs a TTY). Claude authentication remains in native Claude Code. |
+| `agw auth chatgpt [--model M] [--force]` | Authenticate a ChatGPT/Codex subscription (needs a TTY). Claude authentication remains in native Claude Code. |
 | `agw models list [--all] [--json]` | Active models (with `--all`, inactive candidates too). |
 | `agw models verify [MODEL]` | Anthropic-protocol compatibility checks through the proxy. |
 | `agw usage [--json]` | Unified Claude subscription windows and live Codex limits, reset credits, and token activity. |
@@ -60,8 +60,8 @@ External candidates ship disabled. Enable the exact model/provider pair you inte
 agw setup --provider-owner gpt-5.6-sol=chatgpt
 ```
 
-The same option resolves ownership when ChatGPT and Copilot both expose one public name.
-Validation refuses two active mappings for that name and identifies both providers.
+The same option keeps provider selection explicit and leaves room for additional
+subscription backends in a future release.
 
 ## Switching models
 
@@ -77,13 +77,17 @@ Runtime and LiteLLM versions are pinned in `uv.lock`. An upgrade is a reviewed c
 bumps the plugin and runtime versions. If a proxy is running under an older
 config/version, new launches fail with an explicit `agw proxy restart` instruction rather
 than restarting under an active session. Rollback pins the prior plugin/runtime version and
-restarts the proxy; it never touches OAuth credentials.
+restarts the proxy; it never touches OAuth credentials. When an upgrade retires a
+provider route, setup stores the original registry at
+`~/.config/agent-gateway/models.pre-retired-providers.yaml`; restore that file as
+`models.yaml` before reinstalling the prior runtime.
 
 ## Troubleshooting
 
 | Symptom | Action |
 |---------|--------|
-| `provider not authenticated` | Enable only the external model you need, then run `agw auth chatgpt` or `agw auth copilot` |
+| `provider not authenticated` | Enable only the external model you need, then run `agw auth chatgpt` |
+| `legacy copilot creds` | Copilot support is removed. Review and delete `~/.config/agent-gateway/credentials/copilot/`, or run `agw uninstall --credentials` to remove every stored provider credential. |
 | `port … held by an unrelated process` | free the port or change `port` in `~/.config/agent-gateway/config.yaml`, then `agw proxy restart` |
 | `proxy running with a different config/version` | `agw proxy restart` |
 | `did not become ready within 10s` | check `agw logs`; usually an unauthenticated provider |

@@ -83,6 +83,7 @@ def _router_env() -> dict[str, str]:
     for name in (
         "CHATGPT_TOKEN_DIR",
         "CHATGPT_AUTH_FILE",
+        # Scrub the retired provider's legacy variable during upgrades too.
         "GITHUB_COPILOT_TOKEN_DIR",
         "LITELLM_MASTER_KEY",
     ):

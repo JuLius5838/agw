@@ -6,6 +6,12 @@ the plugin and the runtime, bumped together on every release.
 
 ## [Unreleased]
 
+### Removed
+- GitHub Copilot routing and authentication are deferred until a real subscription
+  can exercise the live compatibility gate. Setup safely removes legacy Copilot
+  model-registry entries during upgrade without deleting stored credentials and
+  keeps a permission-restricted pre-migration registry for rollback.
+
 ### Fixed
 - Conversations can switch between ChatGPT/Codex and native Claude models
   without invalid historical reasoning blocks breaking the next request or
@@ -25,8 +31,8 @@ the plugin and the runtime, bumped together on every release.
 ### Added
 - `agw` runtime and Claude Code plugin: route Claude Code through a per-developer,
   loopback-only hybrid router. Native Claude requests retain Claude Code's saved
-  subscription login; ChatGPT/Codex and GitHub Copilot models route through LiteLLM
-  using each developer's provider login.
+  subscription login; ChatGPT/Codex models route through LiteLLM using each
+  developer's provider login.
 - ChatGPT/Codex Responses bridge for Claude Code's Anthropic Messages requests,
   including system-instruction, streaming, and tool-call translation.
 - Native Claude Code `/effort` forwarding to ChatGPT/Codex reasoning effort,
@@ -61,8 +67,8 @@ the plugin and the runtime, bumped together on every release.
   rejection and no fallback.
 - Plugin manifests + `gateway-setup`, `gateway-doctor`, and `model-routing` skills.
 - Security & CI: gitleaks config, shellcheck, dependency-policy guard (forbids compromised
-  LiteLLM `1.82.7`/`1.82.8`), secret-hygiene and raw-log canary tests, GitLab CI, GitHub
-  Actions CI, CodeQL, dependency review, and Dependabot.
+  LiteLLM `1.82.7`/`1.82.8`), secret-hygiene and raw-log canary tests, GitHub Actions CI,
+  CodeQL, dependency review, and Dependabot.
 - Public repository metadata: Apache-2.0 license, contribution guidance, issue and pull
   request templates, personal ownership, and public Claude Code marketplace instructions.
 - Docs: architecture, security/threat-model, operations, model-selection, compatibility

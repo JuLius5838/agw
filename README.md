@@ -5,13 +5,13 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Route Claude Code through a local hybrid gateway: native Claude requests keep the saved
-Claude subscription, while exact configured GPT/Copilot names route to a private LiteLLM
-process on your machine.
+Claude subscription, while exact configured GPT names route to a private LiteLLM process
+on your machine.
 
 ```text
                          ┌▶ Anthropic (native Claude Code OAuth)
 claude ─▶ AGW front router ─┤
- /model switches inside Claude └▶ private LiteLLM ─▶ ChatGPT/Codex or Copilot
+ /model switches inside Claude └▶ private LiteLLM ─▶ ChatGPT/Codex
 ```
 
 You and Claude always name real models (for example `claude-opus-4-8`, `gpt-5.6-sol`);
@@ -54,7 +54,6 @@ and authenticate an exact model/provider pair.
 agw setup                         # install local state and configure external models
 agw setup --provider-owner gpt-5.6-sol=chatgpt  # enable this exact external route
 agw auth chatgpt                  # OAuth device flow for ChatGPT/Codex (needs a TTY)
-agw auth copilot                  # OAuth device flow for GitHub Copilot
 claude                            # managed workflow after setup
 agw claude                        # canonical/debug spelling
 agw claude --model gpt-5.6-sol    # launch on a specific model
@@ -68,7 +67,7 @@ and `/effort` controls either provider using Claude Code's native selector.
 Set `default_effort: max` in `~/.config/agent-gateway/config.yaml` for an overridable
 startup default; an explicit `--effort` or an in-session `/effort` still wins.
 External candidates ship disabled so a fresh install stays native-only; enable only the
-model/provider pairs your team has approved.
+model/provider pairs approved for the repository and data you are working with.
 
 Inside Claude Code, `/agw-usage` opens the same unified dashboard as a native interactive
 dialog. A deterministic plugin hook invokes the local AGW MCP tool and blocks command

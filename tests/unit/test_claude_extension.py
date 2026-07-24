@@ -204,9 +204,7 @@ def test_guard_blocks_and_shows_terminal_fallback_when_mcp_is_unavailable(
     assert shown == [_report()]
 
 
-def test_terminal_fallback_timeout_still_blocks_model_call(
-    tmp_path, monkeypatch
-) -> None:
+def test_terminal_fallback_timeout_still_blocks_model_call(tmp_path, monkeypatch) -> None:
     paths = get_paths({"HOME": str(tmp_path)})
 
     class Terminal(io.StringIO):
@@ -269,9 +267,7 @@ def test_guard_absolute_deadline_includes_collection_and_terminal_wait(
     assert "Press Enter or q" in terminal.getvalue()
 
 
-def test_guard_waits_for_native_dialog_to_close_before_blocking(
-    tmp_path, monkeypatch
-) -> None:
+def test_guard_waits_for_native_dialog_to_close_before_blocking(tmp_path, monkeypatch) -> None:
     paths = get_paths({"HOME": str(tmp_path)})
     fallback_called = threading.Event()
 
@@ -367,9 +363,7 @@ def test_expired_dialog_releases_server_and_can_reopen(tmp_path) -> None:
         )
     )
     guard.start()
-    first_call = threading.Thread(
-        target=lambda: server._show_usage(1, "orphaned-dialog")
-    )
+    first_call = threading.Thread(target=lambda: server._show_usage(1, "orphaned-dialog"))
     first_call.start()
     _wait_for_status(paths, "orphaned-dialog", "native_aborted")
     guard.join(timeout=2)
@@ -395,9 +389,7 @@ def test_expired_dialog_releases_server_and_can_reopen(tmp_path) -> None:
         )
     )
     second_guard.start()
-    second_call = threading.Thread(
-        target=lambda: server._show_usage(2, "orphaned-dialog")
-    )
+    second_call = threading.Thread(target=lambda: server._show_usage(2, "orphaned-dialog"))
     second_call.start()
     _wait_for_status(paths, "orphaned-dialog", "native_ready")
     blocking_reader.feed(
@@ -419,9 +411,7 @@ def test_expired_dialog_releases_server_and_can_reopen(tmp_path) -> None:
     assert [message.get("method") for message in output].count("elicitation/create") == 2
 
 
-def test_guard_bounds_expired_dialog_when_mcp_never_acknowledges(
-    tmp_path, monkeypatch
-) -> None:
+def test_guard_bounds_expired_dialog_when_mcp_never_acknowledges(tmp_path, monkeypatch) -> None:
     paths = get_paths({"HOME": str(tmp_path)})
     monkeypatch.setattr(extension, "_NATIVE_ABORT_ACK_WAIT_SECONDS", 0.05)
     results: list[str] = []
@@ -496,9 +486,7 @@ def test_server_terminates_if_stdin_closes_during_dialog(tmp_path) -> None:
     assert output[-1]["id"] == 2
 
 
-def test_delayed_mcp_cannot_open_after_fallback_claims_ui(
-    tmp_path, monkeypatch
-) -> None:
+def test_delayed_mcp_cannot_open_after_fallback_claims_ui(tmp_path, monkeypatch) -> None:
     paths = get_paths({"HOME": str(tmp_path)})
     fallback_started = threading.Event()
     release_fallback = threading.Event()
@@ -532,9 +520,7 @@ def test_delayed_mcp_cannot_open_after_fallback_claims_ui(
     assert json.loads(results[0])["decision"] == "block"
 
 
-def test_native_failure_transfers_ui_ownership_to_guard(
-    tmp_path, monkeypatch
-) -> None:
+def test_native_failure_transfers_ui_ownership_to_guard(tmp_path, monkeypatch) -> None:
     paths = get_paths({"HOME": str(tmp_path)})
     shown: list[dict[str, object]] = []
 
@@ -584,9 +570,7 @@ def test_guard_still_blocks_if_local_usage_collection_crashes(tmp_path) -> None:
     assert "could not open" in parsed["reason"]
 
 
-def test_guard_still_blocks_if_coordination_storage_fails(
-    tmp_path, monkeypatch
-) -> None:
+def test_guard_still_blocks_if_coordination_storage_fails(tmp_path, monkeypatch) -> None:
     paths = get_paths({"HOME": str(tmp_path)})
     shown: list[dict[str, object]] = []
 
@@ -611,9 +595,7 @@ def test_guard_still_blocks_if_coordination_storage_fails(
     assert shown == [_report()]
 
 
-def test_guard_blocks_even_if_coordination_and_fallback_both_fail(
-    tmp_path, monkeypatch
-) -> None:
+def test_guard_blocks_even_if_coordination_and_fallback_both_fail(tmp_path, monkeypatch) -> None:
     paths = get_paths({"HOME": str(tmp_path)})
 
     monkeypatch.setattr(

@@ -181,12 +181,10 @@ def packaged_agw_claude_plugin_files() -> dict[str, str]:
     """Return files for the personal skills-directory companion plugin."""
     resources = importlib_resources.files("agent_gateway.resources")
     return {
-        ".claude-plugin/plugin.json": (
-            resources / "agw-claude-plugin-manifest.json"
-        ).read_text(encoding="utf-8"),
-        ".mcp.json": (resources / "agw-claude-plugin-mcp.json").read_text(
+        ".claude-plugin/plugin.json": (resources / "agw-claude-plugin-manifest.json").read_text(
             encoding="utf-8"
         ),
+        ".mcp.json": (resources / "agw-claude-plugin-mcp.json").read_text(encoding="utf-8"),
         "hooks/hooks.json": (resources / "agw-claude-plugin-hooks.json").read_text(
             encoding="utf-8"
         ),

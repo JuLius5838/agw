@@ -101,13 +101,32 @@ def test_doctor_warns_on_conflicting_env(tmp_path):
     assert _by_name(report, "env CLAUDE_CODE_USE_BEDROCK") is Level.warn
 
 
+def test_doctor_warns_about_retained_legacy_copilot_credentials(tmp_path):
+    paths = _setup_home(tmp_path, with_creds=True)
+    legacy = paths.provider_credentials_dir("copilot")
+    ensure_dir(legacy)
+    (legacy / "access-token").write_text("legacy-token")
+
+    report = run_doctor(paths, online=False, env={"HOME": str(tmp_path)})
+
+    assert _by_name(report, "legacy copilot creds") is Level.warn
+    detail = next(check.detail for check in report.checks if check.name == "legacy copilot creds")
+    assert "agw uninstall --credentials" in detail
+
+
 # --------------------------------------------------------------------------- #
 # uninstall
 # --------------------------------------------------------------------------- #
 def test_uninstall_preserves_credentials_by_default(tmp_path):
     paths = _setup_home(tmp_path, with_creds=True)
+    legacy = paths.provider_credentials_dir("copilot")
+    ensure_dir(legacy)
+    (legacy / "access-token").write_text("legacy-token")
+
     result = run_uninstall(paths, credentials=False, env={"HOME": str(tmp_path)})
+
     assert paths.credentials_dir.exists()  # preserved
+    assert (legacy / "access-token").is_file()
     assert result.credentials_removed is False
     assert not paths.config_file.exists()  # generated runtime removed
     assert not paths.models_file.exists()
@@ -127,6 +146,10 @@ def test_uninstall_credentials_requires_acknowledgement(tmp_path):
 
 def test_uninstall_credentials_with_acknowledgement(tmp_path):
     paths = _setup_home(tmp_path, with_creds=True)
+    legacy = paths.provider_credentials_dir("copilot")
+    ensure_dir(legacy)
+    (legacy / "access-token").write_text("legacy-token")
+
     result = run_uninstall(
         paths,
         credentials=True,

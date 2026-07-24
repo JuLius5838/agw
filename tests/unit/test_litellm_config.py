@@ -17,9 +17,9 @@ REGISTRY = textwrap.dedent(
     default_model: gpt-5.3-codex
     models:
       - name: zeta-model
-        provider: copilot
-        upstream_model: github_copilot/zeta-model
-        mode: chat
+        provider: chatgpt
+        upstream_model: chatgpt/zeta-model
+        mode: responses
         enabled: true
       - name: gpt-5.3-codex
         provider: chatgpt
@@ -27,9 +27,9 @@ REGISTRY = textwrap.dedent(
         mode: responses
         enabled: true
       - name: inactive-candidate
-        provider: copilot
-        upstream_model: github_copilot/inactive-candidate
-        mode: chat
+        provider: chatgpt
+        upstream_model: chatgpt/inactive-candidate
+        mode: responses
         enabled: false
     """
 )

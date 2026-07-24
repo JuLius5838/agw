@@ -29,9 +29,7 @@ def test_install_adds_skill_and_preserves_other_settings(tmp_path) -> None:
     assert settings["statusLine"]["type"] == "command"
     assert settings["statusLine"]["padding"] == 0
     assert settings["statusLine"]["command"].startswith("/")
-    assert settings["statusLine"]["command"].endswith(
-        " -I -m agent_gateway capture-claude-usage"
-    )
+    assert settings["statusLine"]["command"].endswith(" -I -m agent_gateway capture-claude-usage")
     plugin_dir = claude_dir / "skills" / "agent-gateway"
     assert (plugin_dir / ".claude-plugin" / "plugin.json").is_file()
     assert (plugin_dir / ".mcp.json").is_file()
@@ -108,16 +106,12 @@ def test_install_upgrades_legacy_statusline_to_pinned_runtime(tmp_path) -> None:
 
     settings = json.loads(settings_path.read_text())
     assert settings["statusLine"]["command"].startswith("/")
-    assert settings["statusLine"]["command"].endswith(
-        " -I -m agent_gateway capture-claude-usage"
-    )
+    assert settings["statusLine"]["command"].endswith(" -I -m agent_gateway capture-claude-usage")
     assert result.collector_enabled is True
     assert any("upgraded Claude usage capture" in note for note in result.notes)
 
 
-def test_uninstall_removes_statusline_owned_by_previous_runtime(
-    tmp_path, monkeypatch
-) -> None:
+def test_uninstall_removes_statusline_owned_by_previous_runtime(tmp_path, monkeypatch) -> None:
     runtime_a = tmp_path / "runtime-a" / "python"
     runtime_a.parent.mkdir()
     runtime_a.write_text("#!/bin/sh\nexit 0\n")
@@ -138,9 +132,7 @@ def test_uninstall_removes_statusline_owned_by_previous_runtime(
     assert not (tmp_path / ".claude" / ".agw-statusline-owned.json").exists()
 
 
-def test_install_upgrades_statusline_owned_by_previous_runtime(
-    tmp_path, monkeypatch
-) -> None:
+def test_install_upgrades_statusline_owned_by_previous_runtime(tmp_path, monkeypatch) -> None:
     runtime_a = tmp_path / "runtime-a" / "python"
     runtime_a.parent.mkdir()
     runtime_a.write_text("#!/bin/sh\nexit 0\n")
@@ -324,9 +316,7 @@ def test_uninstall_ignores_unrecognized_paths_in_forged_marker(tmp_path) -> None
     unrelated.write_text("keep me\n")
     marker_path = plugin_dir / ".agw-owned.json"
     marker = json.loads(marker_path.read_text())
-    marker["files"]["../../../unrelated.txt"] = hashlib.sha256(
-        unrelated.read_bytes()
-    ).hexdigest()
+    marker["files"]["../../../unrelated.txt"] = hashlib.sha256(unrelated.read_bytes()).hexdigest()
     marker_path.write_text(json.dumps(marker))
 
     uninstall_claude_usage(env)
@@ -366,9 +356,7 @@ def test_install_rejects_relative_runtime_python(tmp_path, monkeypatch) -> None:
     assert any("disabled the managed /agw-usage" in note for note in result.notes)
 
 
-def test_install_does_not_register_skill_if_plugin_install_raises(
-    tmp_path, monkeypatch
-) -> None:
+def test_install_does_not_register_skill_if_plugin_install_raises(tmp_path, monkeypatch) -> None:
     def broken_install(*_args, **_kwargs):
         raise OSError("disk failure")
 
@@ -408,9 +396,7 @@ def test_runtime_command_ignores_project_shadow_package(tmp_path) -> None:
     shadow = tmp_path / "agent_gateway"
     shadow.mkdir()
     (shadow / "__init__.py").write_text("")
-    (shadow / "__main__.py").write_text(
-        "raise SystemExit('project shadow executed')\n"
-    )
+    (shadow / "__main__.py").write_text("raise SystemExit('project shadow executed')\n")
 
     result = subprocess.run(
         [sys.executable, "-I", "-m", "agent_gateway", "--version"],

@@ -10,6 +10,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from agent_gateway.errors import ExitCode
 
@@ -54,12 +55,18 @@ def test_help_lists_no_unexpected_top_level_commands() -> None:
     # Role aliases and provider prefixes must never leak into the surface.
     assert "team-" not in result.stdout
     assert "chatgpt/" not in result.stdout
-    assert "github_copilot/" not in result.stdout
 
 
 def test_unknown_command_is_nonzero() -> None:
     result = _run_module("definitely-not-a-command")
     assert result.returncode != 0
+
+
+def test_auth_help_lists_only_supported_provider() -> None:
+    result = _run_module("auth", "--help")
+    assert result.returncode == 0
+    assert "chatgpt" in result.stdout
+    assert "copilot" not in result.stdout
 
 
 def test_version_reports_semver() -> None:
@@ -92,11 +99,23 @@ def test_runtime_command_without_setup_returns_config_exit_code(tmp_path) -> Non
     assert "set up" in result.stderr.lower()
 
 
-def _run_module_unconfigured(*args: str, home: str) -> subprocess.CompletedProcess[str]:
-    """Run with an isolated, un-set-up HOME so `agw claude` hits a config error."""
-    env = {**os.environ, "HOME": home}
+def _isolated_env(home: Path, *, native_claude: bool = False) -> dict[str, str]:
+    env = {**os.environ, "HOME": str(home)}
     env.pop("XDG_CONFIG_HOME", None)
     env.pop("XDG_STATE_HOME", None)
+    if native_claude:
+        bin_dir = home / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        executable = bin_dir / "claude"
+        executable.write_text("#!/bin/sh\nexit 0\n")
+        executable.chmod(0o755)
+        env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
+    return env
+
+
+def _run_module_unconfigured(*args: str, home: str) -> subprocess.CompletedProcess[str]:
+    """Run with an isolated, un-set-up HOME so `agw claude` hits a config error."""
+    env = _isolated_env(Path(home))
     return subprocess.run(
         [sys.executable, "-m", "agent_gateway", *args],
         capture_output=True,
@@ -133,9 +152,7 @@ def test_claude_help_is_not_intercepted_by_agw(tmp_path) -> None:
 
 
 def test_models_list_json_after_setup(tmp_path) -> None:
-    env = {**os.environ, "HOME": str(tmp_path)}
-    env.pop("XDG_CONFIG_HOME", None)
-    env.pop("XDG_STATE_HOME", None)
+    env = _isolated_env(tmp_path, native_claude=True)
 
     setup = subprocess.run(
         [sys.executable, "-m", "agent_gateway", "setup"],
@@ -176,9 +193,7 @@ def test_usage_json_degrades_cleanly_without_provider_auth(tmp_path) -> None:
 
 
 def _run_env(*args: str, home: str) -> subprocess.CompletedProcess[str]:
-    env = {**os.environ, "HOME": home}
-    env.pop("XDG_CONFIG_HOME", None)
-    env.pop("XDG_STATE_HOME", None)
+    env = _isolated_env(Path(home), native_claude=True)
     return subprocess.run(
         [sys.executable, "-m", "agent_gateway", *args], capture_output=True, text=True, env=env
     )

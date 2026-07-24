@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -89,8 +91,7 @@ def test_setup_agent_teams_opt_in_survives_without_shell(tmp_path):
     assert cfg.shell_integration is None
 
 
-def test_setup_provider_owner_resolves_duplicate(tmp_path):
-    # A registry where the same public name has two candidates; owner picks one.
+def test_setup_provider_owner_enables_exact_model(tmp_path):
     paths = _paths(tmp_path)
     paths.config_dir.mkdir(parents=True, exist_ok=True)
     paths.models_file.write_text(
@@ -102,21 +103,104 @@ models:
     upstream_model: chatgpt/shared
     mode: responses
     enabled: false
-  - name: shared
+"""
+    )
+    result = run_setup(
+        paths, provider_owner=["shared=chatgpt"], default_model="shared", env=_env(tmp_path)
+    )
+    assert result.active_models == ["shared"]
+    from agent_gateway.model_registry import load_registry
+
+    assert load_registry(paths).get_active("shared").provider.value == "chatgpt"
+
+
+def test_setup_removes_retired_provider_entries(tmp_path):
+    paths = _paths(tmp_path)
+    paths.config_dir.mkdir(parents=True, exist_ok=True)
+    original = """
+# keep this rollback comment
+default_model: legacy-model
+models:
+  - name: gpt-5.6-sol
+    provider: chatgpt
+    upstream_model: chatgpt/gpt-5.6-sol
+    mode: responses
+    enabled: true
+  - name: legacy-model
     provider: copilot
-    upstream_model: github_copilot/shared
+    upstream_model: github_copilot/legacy-model
+    mode: chat
+    enabled: true
+"""
+    paths.models_file.write_text(original)
+
+    result = run_setup(paths, no_shell=True, env=_env(tmp_path))
+
+    from agent_gateway.model_registry import load_registry
+
+    registry = load_registry(paths)
+    assert registry.default_model is None
+    assert [entry.name for entry in registry.active_models()] == ["gpt-5.6-sol"]
+    assert any("copilot" in note for note in result.notes)
+    assert "github_copilot/" not in paths.models_file.read_text()
+    backup = paths.models_file.with_name("models.pre-retired-providers.yaml")
+    assert backup.read_text() == original
+    if os.name == "posix":
+        assert stat.S_IMODE(backup.stat().st_mode) == 0o600
+    assert any(str(backup) in note for note in result.notes)
+
+    backup.write_text("do not overwrite")
+    run_setup(paths, no_shell=True, env=_env(tmp_path))
+    assert backup.read_text() == "do not overwrite"
+
+
+def test_setup_removes_inactive_retired_provider_candidate(tmp_path):
+    paths = _paths(tmp_path)
+    paths.config_dir.mkdir(parents=True, exist_ok=True)
+    paths.models_file.write_text(
+        """
+default_model: null
+models:
+  - name: gpt-4.1
+    provider: copilot
+    upstream_model: github_copilot/gpt-4.1
     mode: chat
     enabled: false
 """
     )
-    result = run_setup(
-        paths, provider_owner=["shared=copilot"], default_model="shared", env=_env(tmp_path)
+
+    run_setup(paths, no_shell=True, env=_env(tmp_path))
+
+    assert "copilot" not in paths.models_file.read_text()
+
+
+def test_setup_clears_retired_default_when_supported_candidate_is_inactive(tmp_path):
+    paths = _paths(tmp_path)
+    paths.config_dir.mkdir(parents=True, exist_ok=True)
+    paths.models_file.write_text(
+        """
+default_model: shared-model
+models:
+  - name: shared-model
+    provider: chatgpt
+    upstream_model: chatgpt/shared-model
+    mode: responses
+    enabled: false
+  - name: shared-model
+    provider: copilot
+    upstream_model: github_copilot/shared-model
+    mode: chat
+    enabled: true
+"""
     )
-    assert result.active_models == ["shared"]
-    # The active one must be the copilot candidate.
+
+    run_setup(paths, no_shell=True, env=_env(tmp_path))
+
     from agent_gateway.model_registry import load_registry
 
-    assert load_registry(paths).get_active("shared").provider.value == "copilot"
+    registry = load_registry(paths)
+    assert registry.default_model is None
+    assert registry.active_models() == ()
 
 
 def test_setup_rejects_unknown_provider_owner(tmp_path):
@@ -203,7 +287,5 @@ def test_setup_keeps_usage_when_config_changes_to_same_directory_alias(tmp_path)
     assert skill.is_file()
     settings = json.loads((real / "settings.json").read_text())
     assert settings["statusLine"]["command"].startswith("/")
-    assert settings["statusLine"]["command"].endswith(
-        " -I -m agent_gateway capture-claude-usage"
-    )
+    assert settings["statusLine"]["command"].endswith(" -I -m agent_gateway capture-claude-usage")
     assert load_config(paths).claude_config_dir == str(real)

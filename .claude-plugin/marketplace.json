@@ -10,7 +10,7 @@
     {
       "name": "agent-gateway",
       "source": "./",
-      "description": "Add ChatGPT/Codex and Copilot subscription models to Claude Code while preserving native Claude login.",
+      "description": "Add ChatGPT/Codex subscription models to Claude Code while preserving native Claude login.",
       "author": {
         "name": "Julien Fresnel",
         "url": "https://github.com/JuLius5838"
@@ -18,7 +18,7 @@
       "homepage": "https://github.com/JuLius5838/agw",
       "repository": "https://github.com/JuLius5838/agw",
       "license": "Apache-2.0",
-      "keywords": ["litellm", "gateway", "codex", "copilot", "model-routing"],
+      "keywords": ["litellm", "gateway", "codex", "model-routing"],
       "category": "model-routing"
     }
   ]

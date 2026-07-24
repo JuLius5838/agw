@@ -1,19 +1,18 @@
 # Agent Gateway — team default model registry (credential-free).
 #
 # `agw setup` copies this file to ~/.config/agent-gateway/models.yaml on first run.
-# Local edits to that copy are never overwritten by upgrades without confirmation.
+# Local edits are preserved. If setup must retire a provider entry, it first saves
+# a one-time 0600 rollback copy as `models.pre-retired-providers.yaml`.
 #
 # Native Claude models keep Claude Code's saved subscription login and bypass
 # LiteLLM. This registry contains only optional external subscription backends:
 #   - chatgpt → ChatGPT/Codex (`agw auth chatgpt`)
-#   - copilot → GitHub Copilot (`agw auth copilot`)
 #
 # Rules enforced by `agw` validation:
 #   - `name` is the EXACT routable model name (no provider prefix).
 #   - `display_name` is an optional picker-only label; it never changes routing.
 #   - `upstream_model` MUST start with its provider's prefix:
 #       chatgpt/         for provider: chatgpt
-#       github_copilot/  for provider: copilot
 #   - `mode` is `responses` or `chat` and must match the upstream model.
 #   - Exactly ONE active (`enabled: true`) entry per public `name`.
 #   - `default_model` is null to retain Claude's native startup default, or names
@@ -33,11 +32,4 @@ models:
     provider: chatgpt
     upstream_model: chatgpt/gpt-5.6-sol
     mode: responses
-    enabled: false
-
-  # GitHub Copilot — confirm the exact model your subscription grants, then enable.
-  - name: gpt-4.1
-    provider: copilot
-    upstream_model: github_copilot/gpt-4.1
-    mode: chat
     enabled: false

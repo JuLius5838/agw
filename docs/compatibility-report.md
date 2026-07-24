@@ -72,7 +72,6 @@ Real subscription flows are deliberately `live`-marked and are not part of offli
       usage and subscription accounting.
 - [ ] End-to-end ChatGPT/Codex response through `/v1/messages`, including streaming, tools,
       and the single custom picker entry on the pinned Claude Code version.
-- [ ] End-to-end GitHub Copilot response.
 - [ ] `agw models verify` full Anthropic-protocol contract against each real external
       upstream.
 - [ ] Per-task subagent and agent-team routing with agent-ID-correlated evidence.

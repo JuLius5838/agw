@@ -44,6 +44,17 @@ def test_marketplace_uses_local_source() -> None:
     assert entries["agent-gateway"]["source"] == "./"
 
 
+def test_public_manifests_advertise_only_shipped_providers() -> None:
+    plugin = json.loads(PLUGIN_JSON.read_text())
+    marketplace = json.loads(MARKETPLACE_JSON.read_text())
+    entry = next(item for item in marketplace["plugins"] if item["name"] == "agent-gateway")
+
+    for manifest in (plugin, entry):
+        claims = f"{manifest['description']} {' '.join(manifest['keywords'])}".lower()
+        assert "chatgpt" in claims or "codex" in claims
+        assert "copilot" not in claims
+
+
 def test_all_skills_present_with_frontmatter() -> None:
     found = {p.parent.name for p in SKILLS_DIR.glob("*/SKILL.md")}
     assert found >= EXPECTED_SKILLS, f"missing skills: {EXPECTED_SKILLS - found}"

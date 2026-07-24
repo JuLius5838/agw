@@ -26,7 +26,8 @@ Diagnose and explain gateway issues without ever revealing secrets.
    non-zero if it finds a blocking problem. Secrets are always redacted.
 
 2. **Map each failing check to an action:**
-   - *provider not authenticated / expired* → `agw auth chatgpt` or `agw auth copilot`.
+
+   - *provider not authenticated / expired* → `agw auth chatgpt`.
    - *native claude not found* → install Claude Code, then `agw setup`.
    - *port in use by an unrelated process* → free the port or change `port` in
      `~/.config/agent-gateway/config.yaml`, then `agw proxy restart`.

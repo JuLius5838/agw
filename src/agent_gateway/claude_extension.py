@@ -257,9 +257,7 @@ def _run_usage_guard(
                 )
                 continue
             should_fallback = status == "native_failed"
-            should_fallback = should_fallback or (
-                status == "pending" and now >= claim_deadline
-            )
+            should_fallback = should_fallback or (status == "pending" and now >= claim_deadline)
             should_fallback = should_fallback or (
                 status == "native_claimed" and now >= ready_deadline
             )
@@ -571,10 +569,7 @@ class ClaudeExtensionServer:
             except queue.Empty:
                 if session_id is not None and token is not None:
                     state = _read_ui_state(self.paths, session_id)
-                    if (
-                        state.get("token") == token
-                        and state.get("status") == "native_expired"
-                    ):
+                    if state.get("token") == token and state.get("status") == "native_expired":
                         raise RuntimeError("usage dialog expired") from None
                 continue
             if raw_line is None:

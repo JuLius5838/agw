@@ -2,9 +2,9 @@
 
 ## Principles
 
-- **Names are real model names.** You and Claude always route with the exact public name (e.g.
-  `gpt-5.6-sol`, `claude-opus-4-8`). Provider prefixes (`anthropic/`, `chatgpt/`,
-  `github_copilot/`) are private routing detail and never appear in prompts.
+- **Names are real model names.** You and Claude always route with the exact public name
+  (e.g. `gpt-5.6-sol`, `claude-opus-4-8`). Provider prefixes (`anthropic/`,
+  `chatgpt/`) are private routing detail and never appear in prompts.
 - **Picker labels are cosmetic.** An optional `display_name` can make the visual picker
   friendlier without becoming a routable alias.
 - **One provider per name per machine.** A public name maps to exactly one active provider.
@@ -20,7 +20,6 @@ registry contains only optional external routes:
 | provider | prefix | subscription auth |
 |----------|--------|-------------------|
 | `chatgpt` | `chatgpt/` | `agw auth chatgpt` (OAuth device flow) |
-| `copilot` | `github_copilot/` | `agw auth copilot` (OAuth device flow) |
 
 The front router sends native Claude names directly to Anthropic and sends only exact
 external names to LiteLLM. It exposes discovery-compatible hidden `anthropic.agw.*` IDs
@@ -58,8 +57,9 @@ switches the next request to Codex.
 
 Validation enforces: exact-name (no `/`), provider-prefix match, valid mode, one active
 entry per name, and—when set—that `default_model` resolves to an active external entry.
-`agw setup` installs the team registry on first run and never overwrites local edits
-without confirmation.
+`agw setup` installs the packaged registry on first run and preserves local edits.
+If an upgrade retires a provider entry, it first saves the original registry as
+`models.pre-retired-providers.yaml` with mode `0600`, then migrates `models.yaml`.
 
 To rename the picker entry, edit only `display_name` in
 `~/.config/agent-gateway/models.yaml`, then start a new `claude` session. Keep `name` and

@@ -2,18 +2,18 @@
 name: gateway-setup
 description: >-
   Install and set up the Agent Gateway so Claude Code can use the developer's
-  personal ChatGPT/Codex or GitHub Copilot subscription as its model backend.
+  personal ChatGPT/Codex subscription as its model backend.
   Use when the user says things like "set up the agent gateway", "install agw",
   "let me use my ChatGPT/Codex subscription in Claude Code", "use Codex as the
-  backend", or "connect my Copilot subscription". Runs a bundled bootstrap that
-  installs the pinned `agw` runtime with uv, then runs `agw setup`.
+  backend". Runs a bundled bootstrap that installs the pinned `agw` runtime with
+  uv, then runs `agw setup`.
 ---
 
 # Agent Gateway — setup
 
 Set up the local hybrid gateway. Native Claude requests retain Claude Code's saved
-subscription; configured ChatGPT/Codex and GitHub Copilot names route through a
-private per-developer LiteLLM process.
+subscription; configured ChatGPT/Codex names route through a private per-developer
+LiteLLM process.
 
 ## What to do
 
@@ -29,9 +29,11 @@ private per-developer LiteLLM process.
    bash "${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap.sh"
    ```
 
-   `agw setup` is non-destructive: it never overwrites a user-edited model
-   registry. It enables the marked, reversible bare-`claude` integration by
-   default when the shell is detectable; pass `--no-shell` to opt out.
+   `agw setup` preserves user-edited registries. When an upgrade retires a
+   provider entry, setup first saves a one-time permission-restricted rollback
+   copy beside `models.yaml`. It enables the marked, reversible bare-`claude`
+   integration by default when the shell is detectable; pass `--no-shell` to
+   opt out.
 
 3. **Enable the requested exact route.** Candidates ship disabled so installation
    remains native-only until the developer makes a provider choice. Inspect them,
@@ -49,7 +51,6 @@ private per-developer LiteLLM process.
 
    ```bash
    agw auth chatgpt     # ChatGPT / Codex subscription
-   agw auth copilot     # GitHub Copilot subscription
    ```
 
    The short-lived verification URL/code appears only on the terminal. Never copy

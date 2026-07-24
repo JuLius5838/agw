@@ -26,18 +26,15 @@ from agent_gateway.paths import DIR_MODE, SECRET_FILE_MODE, Paths, chmod_if_posi
 from agent_gateway.providers import Provider
 from agent_gateway.providers.base import AuthState, AuthStatus, ProviderAdapter
 from agent_gateway.providers.chatgpt import ChatGPTAdapter
-from agent_gateway.providers.copilot import CopilotAdapter
 
 
 def all_adapters() -> tuple[ProviderAdapter, ...]:
-    return (ChatGPTAdapter(), CopilotAdapter())
+    return (ChatGPTAdapter(),)
 
 
 def get_adapter(provider: Provider) -> ProviderAdapter:
     if provider is Provider.chatgpt:
         return ChatGPTAdapter()
-    if provider is Provider.copilot:
-        return CopilotAdapter()
     raise AuthError(f"unknown provider: {provider}")  # pragma: no cover - enum-exhaustive
 
 

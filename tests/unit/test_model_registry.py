@@ -19,10 +19,10 @@ VALID = textwrap.dedent(
         upstream_model: chatgpt/gpt-5.3-codex
         mode: responses
         enabled: true
-      - name: gpt-4.1
-        provider: copilot
-        upstream_model: github_copilot/gpt-4.1
-        mode: chat
+      - name: gpt-5.6-terra
+        provider: chatgpt
+        upstream_model: chatgpt/gpt-5.6-terra
+        mode: responses
         enabled: false
     """
 )
@@ -36,7 +36,7 @@ def test_valid_registry_loads():
     default = reg.default_entry()
     assert default is not None
     assert default.provider.value == "chatgpt"
-    assert [m.name for m in reg.inactive_models()] == ["gpt-4.1"]
+    assert [m.name for m in reg.inactive_models()] == ["gpt-5.6-terra"]
 
 
 def test_inactive_duplicate_candidate_is_accepted():
@@ -52,9 +52,9 @@ def test_inactive_duplicate_candidate_is_accepted():
                 mode: responses
                 enabled: true
               - name: gpt-5.3-codex
-                provider: copilot
-                upstream_model: github_copilot/gpt-5.3-codex
-                mode: chat
+                provider: chatgpt
+                upstream_model: chatgpt/gpt-5.3-codex-alt
+                mode: responses
                 enabled: false
             """
         )
@@ -64,7 +64,7 @@ def test_inactive_duplicate_candidate_is_accepted():
     assert default.provider.value == "chatgpt"
 
 
-def test_duplicate_active_names_rejected_and_names_both_providers():
+def test_duplicate_active_names_rejected():
     text = textwrap.dedent(
         """
         default_model: gpt-5.3-codex
@@ -75,16 +75,16 @@ def test_duplicate_active_names_rejected_and_names_both_providers():
             mode: responses
             enabled: true
           - name: gpt-5.3-codex
-            provider: copilot
-            upstream_model: github_copilot/gpt-5.3-codex
-            mode: chat
+            provider: chatgpt
+            upstream_model: chatgpt/gpt-5.3-codex-alt
+            mode: responses
             enabled: true
         """
     )
     with pytest.raises(ConfigError) as excinfo:
         load_registry_text(text)
     message = str(excinfo.value)
-    assert "chatgpt" in message and "copilot" in message
+    assert "chatgpt" in message
 
 
 def test_default_disabled_rejected():
@@ -98,10 +98,10 @@ def test_default_disabled_rejected():
             upstream_model: chatgpt/gpt-5.3-codex
             mode: responses
             enabled: false
-          - name: gpt-4.1
-            provider: copilot
-            upstream_model: github_copilot/gpt-4.1
-            mode: chat
+          - name: gpt-5.6-terra
+            provider: chatgpt
+            upstream_model: chatgpt/gpt-5.6-terra
+            mode: responses
             enabled: true
         """
     )
@@ -132,7 +132,7 @@ def test_invalid_prefix_rejected():
         models:
           - name: gpt-5.3-codex
             provider: chatgpt
-            upstream_model: github_copilot/gpt-5.3-codex
+            upstream_model: openai/gpt-5.3-codex
             mode: responses
             enabled: true
         """
@@ -183,10 +183,10 @@ def test_empty_active_registry_allowed_for_native_claude():
             upstream_model: chatgpt/gpt-5.3-codex
             mode: responses
             enabled: false
-          - name: gpt-4.1
-            provider: copilot
-            upstream_model: github_copilot/gpt-4.1
-            mode: chat
+          - name: gpt-5.6-terra
+            provider: chatgpt
+            upstream_model: chatgpt/gpt-5.6-terra
+            mode: responses
             enabled: false
         """
     )
@@ -204,8 +204,8 @@ def test_get_active_unknown_raises_model_unavailable():
 
 def test_get_active_inactive_raises_model_unavailable_with_provider():
     reg = load_registry_text(VALID)
-    with pytest.raises(ModelUnavailableError, match="copilot"):
-        reg.get_active("gpt-4.1")
+    with pytest.raises(ModelUnavailableError, match="chatgpt"):
+        reg.get_active("gpt-5.6-terra")
 
 
 def test_packaged_default_registry_is_valid():

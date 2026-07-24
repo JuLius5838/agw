@@ -173,8 +173,9 @@ def _install_companion_plugin(
     escaped_executable = json.dumps(executable)[1:-1]
     packaged = {
         relative: (
-            content.replace("__AGW_PYTHON_EXECUTABLE__", escaped_executable)
-            .replace("__AGW_MODULE__", "agent_gateway")
+            content.replace("__AGW_PYTHON_EXECUTABLE__", escaped_executable).replace(
+                "__AGW_MODULE__", "agent_gateway"
+            )
         )
         for relative, content in packaged_agw_claude_plugin_files().items()
     }
@@ -228,8 +229,7 @@ def _install_companion_plugin(
         )
         return False
     notes.append(
-        "installed the local Claude usage dialog; restart Claude Code before "
-        "running /agw-usage"
+        "installed the local Claude usage dialog; restart Claude Code before running /agw-usage"
     )
     return True
 
@@ -279,9 +279,7 @@ def _uninstall_companion_plugin(claude_dir: Path, notes: list[str]) -> None:
 def _managed_statusline(executable: str) -> dict[str, object]:
     return {
         "type": "command",
-        "command": (
-            f"{shlex.quote(executable)} -I -m agent_gateway capture-claude-usage"
-        ),
+        "command": (f"{shlex.quote(executable)} -I -m agent_gateway capture-claude-usage"),
         "padding": 0,
     }
 
@@ -516,8 +514,7 @@ def install_claude_usage(
 
     if current is None:
         notes.append(
-            "could not resolve AGW's runtime interpreter; "
-            "Claude usage capture was not enabled"
+            "could not resolve AGW's runtime interpreter; Claude usage capture was not enabled"
         )
         return ClaudeUsageInstallResult(
             claude_dir,

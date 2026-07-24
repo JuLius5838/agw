@@ -1,11 +1,11 @@
 [project]
 name = "agent-gateway"
-description = "Add ChatGPT/Codex and Copilot subscription models to Claude Code while preserving native Claude login."
+description = "Add ChatGPT/Codex subscription models to Claude Code while preserving native Claude login."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = "Apache-2.0"
 authors = [{ name = "Julien Fresnel" }]
-keywords = ["claude-code", "litellm", "gateway", "codex", "copilot"]
+keywords = ["claude-code", "litellm", "gateway", "codex"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: Apache Software License",

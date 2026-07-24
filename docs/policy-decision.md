@@ -9,8 +9,8 @@ use of any external subscription bridge for a particular person or organization.
 
 ## Decision required
 
-Approve (or decline) use of LiteLLM's **ChatGPT/Codex subscription** and **GitHub Copilot
-subscription** bridges to back Claude Code via Agent Gateway.
+Approve (or decline) use of LiteLLM's **ChatGPT/Codex subscription** bridge to back
+Claude Code via Agent Gateway.
 
 Decisions are provider-specific and deployment-specific:
 
@@ -27,15 +27,12 @@ Decisions are provider-specific and deployment-specific:
 
 ## What reviewers must weigh
 
-- **Data flow.** Prompts and tool schemas are sent to the selected upstream (OpenAI for
-  ChatGPT/Codex, GitHub for Copilot) under **that provider's account and data policy**, not
-  Anthropic's. Each developer uses their own OAuth subscription tokens.
+- **Data flow.** Prompts and tool schemas are sent to OpenAI under the developer's
+  ChatGPT/Codex account and data policy, not Anthropic's. Each developer uses their
+  own OAuth subscription token.
 - **Anthropic support boundary.** Anthropic does **not** support routing Claude Code to
   non-Claude models. This is a compatibility- and policy-gated use of third-party LiteLLM
   bridges, not a supported configuration.
-- **GitHub Copilot terms.** LiteLLM's Copilot adapter injects Copilot client headers.
-  The applicable individual or organizational Copilot policy and vendor terms must be
-  reviewed before enabling that route.
 - **Supply chain.** LiteLLM is pinned in `uv.lock`; `1.82.7`/`1.82.8` are forbidden
   (compromised). Upgrades require a reviewed change.
 
@@ -47,8 +44,7 @@ private vendor terms or internal approval evidence to AGW's public repository.
 | Date | Provider | Decision | Scope | Owner | Notes/reference |
 |------|----------|----------|-------|-------|-----------------|
 | _TBD_ | ChatGPT/Codex | _pending_ | individual or organization | _TBD_ | |
-| _TBD_ | GitHub Copilot | _pending_ | individual or organization | _TBD_ | |
 
-If either provider is found non-compliant, disable that provider or reduce the approved
-scope. AGW's no-fallback rule prevents that decision from being hidden behind another
-provider.
+If the provider is found non-compliant, disable the external route or reduce the
+approved scope. AGW's no-fallback rule prevents that decision from being hidden
+behind another provider.

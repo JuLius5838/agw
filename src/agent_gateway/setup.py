@@ -6,8 +6,7 @@ Setup is non-interactive and preserves user-edited external model entries. It:
   * installs the packaged default registry on first run (preserving local edits),
   * applies any ``--provider-owner`` and ``--default-model`` choices, validating
     the result, and
-  * migrates the obsolete development-only Anthropic registry entry without
-    creating or storing a second Claude credential, and
+  * migrates registry entries for providers removed from the current release, and
   * enables plain ``claude`` shell integration by default when the shell is known.
 """
 
@@ -70,7 +69,7 @@ def _parse_provider_owner(entries: Sequence[str]) -> dict[str, Provider]:
         except ValueError as exc:
             raise ConfigError(
                 f"unknown provider in --provider-owner {entry!r}: {provider_str}",
-                hint="Provider must be `chatgpt` or `copilot`.",
+                hint="Provider must be `chatgpt`.",
             ) from exc
     return owners
 
@@ -106,12 +105,15 @@ def _apply_registry_choices(
     return yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
 
 
-def _migrate_legacy_anthropic(raw_yaml: str) -> tuple[str, bool]:
-    """Remove obsolete Anthropic-as-LiteLLM entries from early AGW registries.
+_REMOVED_REGISTRY_PROVIDERS = frozenset({"anthropic", "copilot"})
 
-    Native Claude no longer belongs in this registry. External entries and their
-    ordering are retained; a removed native default becomes ``null`` so Claude
-    Code keeps its own model selection.
+
+def _migrate_removed_providers(raw_yaml: str) -> tuple[str, frozenset[str]]:
+    """Remove entries for providers retired from the current release.
+
+    Supported entries and their ordering are retained. A removed external default
+    becomes ``null`` when no supported entry with the same public name remains, so
+    Claude Code safely falls back to its native startup selection.
     """
     data = yaml.safe_load(raw_yaml) or {}
     if not isinstance(data, dict):
@@ -120,29 +122,51 @@ def _migrate_legacy_anthropic(raw_yaml: str) -> tuple[str, bool]:
     if not isinstance(models, list):
         raise ConfigError("model registry `models` must be a list.")
 
+    removed_providers = frozenset(
+        str(model.get("provider"))
+        for model in models
+        if isinstance(model, dict) and model.get("provider") in _REMOVED_REGISTRY_PROVIDERS
+    )
     removed_names = {
         str(model.get("name"))
         for model in models
-        if isinstance(model, dict) and model.get("provider") == "anthropic"
+        if isinstance(model, dict) and model.get("provider") in _REMOVED_REGISTRY_PROVIDERS
     }
     if not removed_names:
-        return raw_yaml, False
+        return raw_yaml, frozenset()
 
     kept = [
         model
         for model in models
-        if not (isinstance(model, dict) and model.get("provider") == "anthropic")
+        if not (isinstance(model, dict) and model.get("provider") in _REMOVED_REGISTRY_PROVIDERS)
     ]
     data["models"] = kept
-    remaining_names = {
-        str(model.get("name")) for model in kept if isinstance(model, dict) and model.get("name")
+    remaining_active_names = {
+        str(model.get("name"))
+        for model in kept
+        if isinstance(model, dict) and model.get("name") and model.get("enabled") is True
     }
     if (
         data.get("default_model") in removed_names
-        and data.get("default_model") not in remaining_names
+        and data.get("default_model") not in remaining_active_names
     ):
         data["default_model"] = None
-    return yaml.safe_dump(data, sort_keys=False, default_flow_style=False), True
+    return (
+        yaml.safe_dump(data, sort_keys=False, default_flow_style=False),
+        removed_providers,
+    )
+
+
+def _backup_registry_before_retired_provider_migration(
+    paths: Paths,
+    raw_yaml: str,
+) -> tuple[Path, bool]:
+    """Create one permission-safe, non-overwriting rollback copy of the registry."""
+    backup = paths.models_file.with_name("models.pre-retired-providers.yaml")
+    if backup.exists() or backup.is_symlink():
+        return backup, False
+    atomic_write_text(backup, raw_yaml, mode=0o600)
+    return backup, True
 
 
 def run_setup(
@@ -171,9 +195,16 @@ def run_setup(
 
     existed = paths.models_file.exists()
     base = read_text(paths.models_file) if existed else packaged_default_models_yaml()
-    base, migrated = _migrate_legacy_anthropic(base)
+    original_registry = base
+    base, migrated_providers = _migrate_removed_providers(base)
+    migration_backup: tuple[Path, bool] | None = None
+    if existed and migrated_providers:
+        migration_backup = _backup_registry_before_retired_provider_migration(
+            paths,
+            original_registry,
+        )
 
-    if existed and not (default_model or owners) and not migrated:
+    if existed and not (default_model or owners) and not migrated_providers:
         notes.append(f"kept existing model registry at {paths.models_file}")
         registry_text = base
     else:
@@ -181,8 +212,14 @@ def run_setup(
             base, default_model=default_model, provider_owners=owners
         )
         atomic_write_text(paths.models_file, registry_text, mode=0o600)
-        if migrated:
-            notes.append("migrated legacy Anthropic entry to native Claude passthrough")
+        if migrated_providers:
+            notes.append(
+                "removed retired model-provider entries: " + ", ".join(sorted(migrated_providers))
+            )
+            assert migration_backup is not None
+            backup_path, created = migration_backup
+            action = "saved" if created else "kept existing"
+            notes.append(f"{action} pre-migration model registry at {backup_path}")
 
     registry = load_registry_text(registry_text)  # validates; raises ConfigError
 

@@ -5,7 +5,7 @@ a shell startup file. This document records the threats it defends against and h
 
 ## Assets
 
-- **Provider OAuth tokens** (ChatGPT/Codex, GitHub Copilot) under
+- **Provider OAuth tokens** (ChatGPT/Codex) under
   `~/.config/agent-gateway/credentials/<provider>/`.
 - **Local proxy key** (`credentials/proxy-key`) — a loopback credential that
   authenticates Claude Code to the local proxy.
@@ -32,15 +32,17 @@ a shell startup file. This document records the threats it defends against and h
 
 ## Data flow / privacy
 
-Prompts and tool schemas are sent to the selected upstream provider (OpenAI for
-ChatGPT/Codex, GitHub for Copilot) under **that provider's account and data
-policy**. This is a compatibility- and policy-gated use of LiteLLM's subscription
-bridges. Native Claude traffic remains direct to Anthropic using Claude Code's
-saved login. See `docs/policy-decision.md`.
+Prompts and tool schemas are sent to OpenAI under the developer's ChatGPT/Codex
+account and data policy. This is a compatibility- and policy-gated use of
+LiteLLM's subscription bridge. Native Claude traffic remains direct to Anthropic
+using Claude Code's saved login. See `docs/policy-decision.md`.
 
 ## Update & rollback
 
 Runtime and LiteLLM versions are pinned in `uv.lock`. An upgrade is a reviewed
 repository change that bumps both the plugin and runtime versions. Rollback pins
 the prior marketplace/plugin version, reinstalls the prior runtime, and restarts
-the managed proxy; it never rolls back or copies OAuth credentials.
+the managed proxy; it never rolls back or copies OAuth credentials. When a
+provider is retired, setup removes its model routes but does not silently delete
+its stored OAuth material; `agw doctor` reports the legacy directory and its
+cleanup options.

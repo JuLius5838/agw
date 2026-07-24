@@ -618,9 +618,7 @@ def _trusted_codex_executable(paths: Paths) -> str:
                 "Codex CLI changed since setup; review it and run `agw setup` again"
             )
     except OSError as exc:
-        raise UsageUnavailable(
-            "Codex CLI is unavailable; install it and run `agw setup`"
-        ) from exc
+        raise UsageUnavailable("Codex CLI is unavailable; install it and run `agw setup`") from exc
     return str(resolved)
 
 
