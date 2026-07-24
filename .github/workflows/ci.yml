@@ -17,6 +17,9 @@ concurrency:
 env:
   UV_VERSION: "0.11.8"
   PYTHON_VERSION: "3.12"
+  # Pin the Claude CLI used for plugin validation to the reviewed, tested
+  # version. Bump deliberately alongside a compatibility check.
+  CLAUDE_CODE_VERSION: "2.1.218"
 
 jobs:
   quality:
@@ -114,7 +117,7 @@ jobs:
           node-version: "22"
 
       - name: Install Claude Code
-        run: npm install --global @anthropic-ai/claude-code
+        run: npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
       - name: Validate plugin and marketplace
         run: claude plugin validate --strict .

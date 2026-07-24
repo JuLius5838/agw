@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses a single version for
 the plugin and the runtime, bumped together on every release.
 
-## [Unreleased]
+## [0.2.0] - 2026-07-24
 
 ### Removed
 - GitHub Copilot routing and authentication are deferred until a real subscription
@@ -75,7 +75,7 @@ the plugin and the runtime, bumped together on every release.
   report (Gate A), and adopter policy-decision template.
 
 ### Pinned
-- Agent Gateway `0.1.9`; LiteLLM `1.93.0`; Python `3.12`; minimum Claude Code
+- Agent Gateway `0.2.0`; LiteLLM `1.93.0`; Python `3.12`; minimum Claude Code
   `2.1.211` (tested on `2.1.218`).
 
 ### Notes

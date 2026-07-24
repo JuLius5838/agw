@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "agent-gateway",
   "displayName": "Agent Gateway",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "Local, zero-model-call Agent Gateway integration for Claude Code.",
   "author": {
     "name": "Julien Fresnel",

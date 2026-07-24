@@ -7,4 +7,4 @@ names route to a private LiteLLM child using ChatGPT/Codex OAuth.
 
 from __future__ import annotations
 
-__version__ = "0.1.9"
+__version__ = "0.2.0"

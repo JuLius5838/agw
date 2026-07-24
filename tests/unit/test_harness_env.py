@@ -123,8 +123,21 @@ def test_agent_teams_opt_in_controls_flag():
 
 
 def test_provider_token_dirs_never_leak_into_child_env():
-    env = _env()
+    # Even when the surrounding shell exports provider credential paths (or the
+    # retired Copilot variable), none may reach the native Claude child.
+    base = {
+        "CHATGPT_TOKEN_DIR": "/home/dev/.config/agent-gateway/credentials/chatgpt",
+        "CHATGPT_AUTH_FILE": "/home/dev/.config/agent-gateway/credentials/chatgpt/auth.json",
+        "GITHUB_COPILOT_TOKEN_DIR": "/home/dev/.config/agent-gateway/credentials/copilot",
+        "LITELLM_MASTER_KEY": "sk-agw-secret",
+        "UNRELATED_VAR": "keep-me",
+    }
+    env = _env(base=base)
     assert "CHATGPT_TOKEN_DIR" not in env
+    assert "CHATGPT_AUTH_FILE" not in env
+    assert "GITHUB_COPILOT_TOKEN_DIR" not in env
+    assert "LITELLM_MASTER_KEY" not in env
+    assert env["UNRELATED_VAR"] == "keep-me"
 
 
 def test_inherited_anthropic_model_removed_when_explicit_flag_given():

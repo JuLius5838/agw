@@ -35,6 +35,17 @@ _CUSTOM_MODEL_VARS = (
     "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION",
 )
 
+# Variables that locate external-provider credentials (and the internal proxy
+# master key). The managed LiteLLM child needs these; the native Claude child
+# must never inherit them, even if the surrounding shell exported one — including
+# the retired Copilot variable left over from an earlier install.
+_PROVIDER_SECRET_VARS = (
+    "CHATGPT_TOKEN_DIR",
+    "CHATGPT_AUTH_FILE",
+    "GITHUB_COPILOT_TOKEN_DIR",
+    "LITELLM_MASTER_KEY",
+)
+
 
 def _has_cli_option(args: Sequence[str], option: str) -> bool:
     for arg in args:
@@ -143,7 +154,11 @@ class ClaudeHarness(Harness):
         if config.agent_teams_enabled:
             env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "1"
 
-        # Provider token-dir variables are intentionally NOT added here.
+        # Provider token-dir variables are never added here, and any inherited
+        # from the surrounding shell are scrubbed so external-provider credential
+        # paths and the internal proxy key cannot reach the native Claude child.
+        for variable in _PROVIDER_SECRET_VARS:
+            env.pop(variable, None)
         return env
 
     def launch(
