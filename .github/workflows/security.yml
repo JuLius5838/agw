@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out full history
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -41,7 +41,7 @@ jobs:
       security-events: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@0b1f0509b2ddb4dc7bd94367abfe7ad1d8a1b810 # v3.30.5
