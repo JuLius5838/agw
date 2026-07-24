@@ -228,3 +228,59 @@ def test_copilot_device_flow_wraps_litellm_errors(tmp_path):
     with pytest.raises(AuthError, match="GitHub Copilot authentication failed") as excinfo:
         adapter.run_device_flow(tmp_path)
     assert excinfo.value.hint == "agw auth copilot"
+
+
+def _stage_copilot_token(paths: Paths) -> None:
+    active = CopilotAdapter().active_token_dir(paths)
+    active.mkdir(parents=True)
+    (active / "access-token").write_text("ghu_faketoken")
+
+
+def test_chatgpt_entitlement_is_a_noop_success(tmp_path):
+    # Providers without a subscription gate report usable by default.
+    assert ChatGPTAdapter().entitlement(_paths(tmp_path)).ok is True
+
+
+def test_copilot_entitlement_active_subscription(tmp_path):
+    paths = _paths(tmp_path)
+    _stage_copilot_token(paths)
+    ent = CopilotAdapter().entitlement(
+        paths,
+        exchange=lambda token: (200, {"token": "copilot-key", "endpoints": {"api": "https://x"}}),
+    )
+    assert ent.ok is True
+    assert "active Copilot subscription" in ent.detail
+
+
+def test_copilot_entitlement_reports_subscription_ended(tmp_path):
+    paths = _paths(tmp_path)
+    _stage_copilot_token(paths)
+    body = {
+        "error_details": {"message": "Your subscription has ended. You are logged in as X."},
+        "message": "Resource not accessible by integration.",
+    }
+    ent = CopilotAdapter().entitlement(paths, exchange=lambda token: (403, body))
+    assert ent.ok is False
+    assert "subscription has ended" in ent.detail  # prefers the human-readable reason
+
+
+def test_copilot_entitlement_missing_credential(tmp_path):
+    # No access token staged: fails before any exchange is attempted.
+    def _must_not_call(_token: str) -> tuple[int, object]:
+        raise AssertionError("exchange must not run without a token")
+
+    ent = CopilotAdapter().entitlement(_paths(tmp_path), exchange=_must_not_call)
+    assert ent.ok is False
+    assert "no GitHub Copilot credential" in ent.detail
+
+
+def test_copilot_entitlement_network_error_is_inconclusive(tmp_path):
+    paths = _paths(tmp_path)
+    _stage_copilot_token(paths)
+
+    def _boom(_token: str) -> tuple[int, object]:
+        raise RuntimeError("dns failure")
+
+    ent = CopilotAdapter().entitlement(paths, exchange=_boom)
+    assert ent.ok is False
+    assert "could not reach GitHub Copilot" in ent.detail

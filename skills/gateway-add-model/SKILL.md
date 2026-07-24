@@ -61,6 +61,10 @@ the gateway never falls back to a different model.
    agw auth copilot    # GitHub Copilot
    ```
 
+   For Copilot, `agw auth copilot` also verifies the account has an active Copilot
+   subscription and reports plainly if it has lapsed (the credential is still
+   stored for when the plan is reactivated).
+
 4. **Verify Claude compatibility.** A model that fails here is unusable under that
    exact name — there is no fallback:
 

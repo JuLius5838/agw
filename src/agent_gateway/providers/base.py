@@ -39,6 +39,19 @@ class AuthState:
     detail: str
 
 
+@dataclass(frozen=True)
+class Entitlement:
+    """Result of a provider's optional live entitlement check (never contains secrets).
+
+    Distinguishes a stored credential from an *usable* one. A provider whose OAuth
+    sign-in can succeed while the underlying subscription is inactive (e.g. GitHub
+    Copilot) overrides :meth:`ProviderAdapter.entitlement` to surface that plainly.
+    """
+
+    ok: bool
+    detail: str
+
+
 class ProviderAdapter(ABC):
     """Base class for provider authentication adapters."""
 
@@ -71,6 +84,17 @@ class ProviderAdapter(ABC):
     @abstractmethod
     def auth_state(self, paths: Paths) -> AuthState:
         """Inspect the active credentials (for ``doctor``/``status``)."""
+
+    def entitlement(self, paths: Paths) -> Entitlement:
+        """Optional live check that an authenticated credential is actually usable.
+
+        The default is no separate gate: a present, unexpired credential suffices.
+        Providers whose sign-in can succeed without an active subscription override
+        this to perform a bounded, redacted network check. It is intentionally
+        NOT part of the proxy-startup auth gate (that must stay offline and fast);
+        only ``agw auth`` and an online ``agw doctor`` invoke it.
+        """
+        return Entitlement(ok=True, detail="")
 
     def remediation(self) -> str:
         """The command a user runs to (re)authenticate this provider."""

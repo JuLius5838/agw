@@ -129,7 +129,7 @@ def _model_allowlist(registry: ModelRegistry, env: Mapping[str, str]) -> list[Ch
     return checks
 
 
-def _providers(paths: Paths, registry: ModelRegistry) -> list[Check]:
+def _providers(paths: Paths, registry: ModelRegistry, *, online: bool) -> list[Check]:
     from agent_gateway.auth import get_adapter
     from agent_gateway.providers.base import AuthStatus
 
@@ -138,11 +138,30 @@ def _providers(paths: Paths, registry: ModelRegistry) -> list[Check]:
     for provider in sorted(providers, key=lambda p: p.value):
         adapter = get_adapter(provider)
         state = adapter.auth_state(paths)
-        level = Level.ok if state.status is AuthStatus.authenticated else Level.fail
-        detail = state.detail
         if state.status is not AuthStatus.authenticated:
-            detail += f" — run `{adapter.remediation()}`"
-        checks.append(Check(level, f"auth: {adapter.display_name}", detail))
+            checks.append(
+                Check(
+                    Level.fail,
+                    f"auth: {adapter.display_name}",
+                    f"{state.detail} — run `{adapter.remediation()}`",
+                )
+            )
+            continue
+        # Credential present. When online, confirm it is actually usable (e.g. an
+        # active Copilot subscription) so a lapsed plan surfaces here as a warning
+        # rather than an opaque routing error at request time.
+        if online:
+            entitlement = adapter.entitlement(paths)
+            if not entitlement.ok:
+                checks.append(
+                    Check(
+                        Level.warn,
+                        f"auth: {adapter.display_name}",
+                        f"credential present, but {entitlement.detail}",
+                    )
+                )
+                continue
+        checks.append(Check(Level.ok, f"auth: {adapter.display_name}", state.detail))
     return checks
 
 
@@ -198,7 +217,7 @@ def run_doctor(
                 f"startup {registry.default_model or 'native Claude selection'}",
             )
         )
-        checks += _providers(paths, registry)
+        checks += _providers(paths, registry, online=online)
         checks += _model_allowlist(registry, environ)
     except GatewayError as exc:
         checks.append(Check(Level.fail, "models", exc.message))

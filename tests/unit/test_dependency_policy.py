@@ -39,3 +39,13 @@ def test_pinned_litellm_exposes_expected_copilot_contract() -> None:
     assert model_cost["github_copilot/gpt-4.1"]["mode"] == "chat"
     # A product display name is not enough to route; never silently add a guessed Kimi slug.
     assert not any(key.startswith("github_copilot/kimi") for key in model_cost)
+
+
+def test_copilot_entitlement_endpoint_matches_pinned_litellm() -> None:
+    # The entitlement diagnostic reads this URL from LiteLLM to avoid drift.
+    from litellm.llms.github_copilot.authenticator import DEFAULT_GITHUB_API_KEY_URL
+
+    from agent_gateway.providers.copilot import _copilot_api_key_url
+
+    assert _copilot_api_key_url() == DEFAULT_GITHUB_API_KEY_URL
+    assert DEFAULT_GITHUB_API_KEY_URL.endswith("/copilot_internal/v2/token")

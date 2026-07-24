@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses a single version for
 the plugin and the runtime, bumped together on every release.
 
+## [0.4.0] - 2026-07-24
+
+### Added
+- GitHub Copilot provider (`agw auth copilot`, registry `provider: copilot`, upstream
+  prefix `github_copilot/`), restored with an OAuth token directory isolated from
+  ChatGPT and revalidated against pinned LiteLLM 1.93.0. Ships a single disabled
+  `gpt-4.1` candidate; enable and authenticate an exact model/provider pair before use.
+  Native Claude and ChatGPT/Codex routing are unchanged, and the exact-name/no-fallback
+  rule is preserved (one active provider per public name).
+- Copilot entitlement diagnostic: `agw auth copilot` and an online `agw doctor` perform a
+  bounded, redacted GitHub token→API-key exchange and report a lapsed Copilot subscription
+  in plain language (GitHub's own message), instead of surfacing LiteLLM's opaque
+  "no healthy deployments" error only after a model is enabled and called. The check is
+  kept out of the offline proxy-startup gate, which stays network-free.
+
+### Notes
+- Copilot's end-to-end live pilot (a real response through `/v1/messages`) requires an
+  active GitHub Copilot subscription and remains pending; the offline routing, credential
+  isolation, and auth/entitlement contracts are covered by the automated suite. No Kimi or
+  other Copilot models are packaged — add only an exact, catalog-confirmed slug. The pinned
+  LiteLLM catalog contains `github_copilot/gpt-4.1` but no Kimi ID, so none is inferred.
+
 ## [0.3.0] - 2026-07-24
 
 ### Added

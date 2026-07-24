@@ -112,6 +112,61 @@ def test_doctor_checks_copilot_credential_permissions(tmp_path):
     assert _by_name(report, "copilot creds dir perms") is Level.ok
 
 
+_COPILOT_REGISTRY = """
+default_model: null
+models:
+  - name: gpt-4.1
+    provider: copilot
+    upstream_model: github_copilot/gpt-4.1
+    mode: chat
+    enabled: true
+"""
+
+
+def _stage_active_copilot(tmp_path: Path) -> Paths:
+    paths = _setup_home(tmp_path, with_creds=False)
+    paths.models_file.write_text(_COPILOT_REGISTRY)
+    copilot = paths.provider_credentials_dir("copilot")
+    ensure_dir(copilot)
+    (copilot / "access-token").write_text("ghu_fake")
+    return paths
+
+
+def test_doctor_online_warns_when_copilot_subscription_inactive(tmp_path, monkeypatch):
+    from agent_gateway.providers.copilot import CopilotAdapter
+
+    paths = _stage_active_copilot(tmp_path)
+    monkeypatch.setattr(
+        CopilotAdapter,
+        "_exchange_access_token",
+        staticmethod(
+            lambda token: (403, {"error_details": {"message": "Your subscription has ended."}})
+        ),
+    )
+
+    report = run_doctor(paths, online=True, env={"HOME": str(tmp_path)})
+
+    assert _by_name(report, "auth: GitHub Copilot") is Level.warn
+    detail = next(c.detail for c in report.checks if c.name == "auth: GitHub Copilot")
+    assert "subscription has ended" in detail
+
+
+def test_doctor_offline_does_not_exchange_copilot_token(tmp_path, monkeypatch):
+    from agent_gateway.providers.copilot import CopilotAdapter
+
+    paths = _stage_active_copilot(tmp_path)
+
+    def _must_not_call(_token: str) -> tuple[int, object]:
+        raise AssertionError("offline doctor must not perform a network exchange")
+
+    monkeypatch.setattr(CopilotAdapter, "_exchange_access_token", staticmethod(_must_not_call))
+
+    report = run_doctor(paths, online=False, env={"HOME": str(tmp_path)})
+
+    # Credential present is enough offline; no entitlement network call is made.
+    assert _by_name(report, "auth: GitHub Copilot") is Level.ok
+
+
 # --------------------------------------------------------------------------- #
 # uninstall
 # --------------------------------------------------------------------------- #

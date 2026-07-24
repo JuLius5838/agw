@@ -94,7 +94,8 @@ provider route, setup stores the original registry at
 | Symptom | Action |
 |---------|--------|
 | `provider not authenticated` | Enable only the external model you need, then run `agw auth chatgpt` or `agw auth copilot` for its selected provider. |
-| Copilot OAuth succeeds but model verification fails | Confirm the exact slug and mode, subscription entitlement, and provider policy; there is no fallback. |
+| `GitHub Copilot: signed in, but ... subscription has ended` (from `agw auth copilot` or `agw doctor`) | The GitHub account has no active Copilot plan. Activate one at https://github.com/settings/copilot, then re-run `agw auth copilot`. The stored credential is reused once the plan is active. |
+| Copilot model verification fails with an active plan | Confirm the exact slug and mode and provider policy; there is no fallback. |
 | `port … held by an unrelated process` | free the port or change `port` in `~/.config/agent-gateway/config.yaml`, then `agw proxy restart` |
 | `proxy running with a different config/version` | `agw proxy restart` |
 | `did not become ready within 10s` | check `agw logs`; usually an unauthenticated provider |

@@ -50,8 +50,12 @@ LiteLLM's `chatgpt/` and `github_copilot/` providers can enter interactive devic
 flows when called without valid tokens. AGW therefore validates every enabled external
 provider before starting the private LiteLLM child and applies a bounded readiness timeout.
 The Copilot offline auth probe confirms only that device login produced a non-empty GitHub
-access token; subscription entitlement and the derived API-key exchange are intentionally
-left to the live `agw models verify` call. With no enabled external model, LiteLLM is
+access token. Because a GitHub sign-in can succeed for an account with no active Copilot
+plan, `agw auth copilot` and an online `agw doctor` additionally perform a bounded,
+redacted token→API-key exchange and report a lapsed subscription in plain language (GitHub's
+own "your subscription has ended" message) instead of surfacing LiteLLM's opaque "no healthy
+deployments" error only after a model is enabled and called. The full request path is still
+confirmed by the live `agw models verify` call. With no enabled external model, LiteLLM is
 intentionally absent and native Claude remains usable.
 
 Claude is not configured as a LiteLLM provider. The front router forwards native requests

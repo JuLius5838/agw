@@ -161,9 +161,27 @@ def auth(
     from agent_gateway.auth import authenticate, get_adapter
     from agent_gateway.paths import get_paths
 
+    paths = get_paths()
     adapter = get_adapter(provider)
-    state = authenticate(get_paths(), adapter, model=model, force=force)
-    typer.secho(f"✓ {adapter.display_name}: {state.detail}", fg=typer.colors.GREEN)
+    state = authenticate(paths, adapter, model=model, force=force)
+
+    # Sign-in stored a credential; confirm it is actually usable. For providers
+    # without a separate subscription gate this is a no-op that reports success.
+    entitlement = adapter.entitlement(paths)
+    if entitlement.ok:
+        detail = f"{state.detail}; {entitlement.detail}" if entitlement.detail else state.detail
+        typer.secho(f"✓ {adapter.display_name}: {detail}", fg=typer.colors.GREEN)
+        return
+    typer.secho(
+        f"! {adapter.display_name}: signed in, but {entitlement.detail}",
+        fg=typer.colors.YELLOW,
+        err=True,
+    )
+    typer.secho(
+        "  the credential is stored; re-run after the subscription is active.",
+        fg=typer.colors.YELLOW,
+        err=True,
+    )
 
 
 # --------------------------------------------------------------------------- #
