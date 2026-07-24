@@ -1,0 +1,31 @@
+# gitleaks configuration for agent-gateway.
+#
+# We inherit gitleaks' default ruleset and add an allowlist for the deliberately
+# fake, secret-shaped fixtures used by the redaction / secret-hygiene tests.
+# Nothing in `src/`, `scripts/`, `skills/`, or the manifests is allowlisted.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake secret-shaped fixtures used only in tests, and build/cache artifacts"
+paths = [
+  '''tests/unit/test_redaction\.py''',
+  '''tests/unit/test_observability\.py''',
+  '''tests/unit/test_secret_hygiene\.py''',
+  '''tests/unit/test_models\.py''',
+  '''tests/contract/.*\.py''',
+  '''tests/integration/.*\.py''',
+  # Build/cache artifacts (gitignored; only reachable via --no-git working-tree scan).
+  '''.*__pycache__.*''',
+  '''.*\.pyc$''',
+  '''\.venv/.*''',
+  '''.*\.egg-info/.*''',
+  '''dist/.*''',
+]
+# Also allow the obviously-fake token stems our fixtures use.
+regexes = [
+  '''sk-agw-(?:probe|contract|test|key|REALKEY|secret|abcdef)''',
+  '''fake-(?:access|refresh|id)-token''',
+  '''gho_16charsAAAAAAAAAAAAAAAAAAAAAAaa''',
+]

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "agent-gateway",
+  "version": "0.1.8",
+  "description": "Add ChatGPT/Codex and Copilot subscription models to Claude Code while preserving its native Claude login. Ships the `agw` launcher, unified usage dashboard, and setup/doctor/model-routing skills.",
+  "author": {
+    "name": "Julien Fresnel"
+  },
+  "keywords": ["litellm", "gateway", "codex", "copilot", "model-routing"]
+}

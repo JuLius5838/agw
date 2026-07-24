@@ -1,0 +1,76 @@
+# CI for agent-gateway. Installs strictly from uv.lock and runs the full offline
+# gate: format, lint, types, shell lint, tests (no live OAuth), manifest
+# validation, secret scanning, and a dependency-policy check.
+
+stages: [lint, test, security]
+
+variables:
+  UV_VERSION: "0.11.8"
+  PYTHON_VERSION: "3.12"
+
+.uv:
+  image: ghcr.io/astral-sh/uv:${UV_VERSION}-python${PYTHON_VERSION}-bookworm-slim
+  before_script:
+    - uv sync --frozen --all-groups
+  cache:
+    key:
+      files: [uv.lock]
+    paths: [.venv, .cache/uv]
+
+format:
+  extends: .uv
+  stage: lint
+  script:
+    - uv run ruff format --check .
+    - uv run ruff check .
+
+types:
+  extends: .uv
+  stage: lint
+  script:
+    - uv run mypy src tests
+
+shellcheck:
+  stage: lint
+  image: koalaman/shellcheck-alpine:stable
+  before_script: []
+  script:
+    - shellcheck scripts/bootstrap.sh
+
+test:
+  extends: .uv
+  stage: test
+  script:
+    # 'not live' excludes tests that need real provider OAuth; native-router
+    # process/protocol contracts still run.
+    - uv run pytest -m "not live" --cov=agent_gateway --cov-report=term-missing
+  artifacts:
+    when: always
+    reports:
+      junit: junit.xml
+
+manifest:
+  stage: security
+  image: node:22-bookworm-slim
+  before_script:
+    - npm install -g @anthropic-ai/claude-code
+  script:
+    - claude plugin validate .
+  allow_failure: true  # tolerate CLI availability drift; local + test cover it
+
+secret-scan:
+  stage: security
+  image:
+    name: zricethezav/gitleaks:latest
+    entrypoint: [""]
+  before_script: []
+  script:
+    - gitleaks detect --source . --no-git --config .gitleaks.toml --redact --verbose
+
+dependency-policy:
+  extends: .uv
+  stage: security
+  script:
+    # Fails if a forbidden/compromised LiteLLM is locked or installed.
+    - uv run pytest tests/unit/test_dependency_policy.py -v
+    - uv run pip list --format=freeze | grep -Ev '^litellm==(1\.82\.7|1\.82\.8)$' > /dev/null

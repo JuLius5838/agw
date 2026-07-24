@@ -1,0 +1,177 @@
+"""Unit tests for authentication orchestration and provider adapters.
+
+The orchestration (staging, atomic swap, preserve-on-cancel, TTY gate) is tested
+with a fake adapter so no network or real OAuth is involved. The real ChatGPT and
+Copilot adapters are covered only for their pure, offline logic (env construction
+and reading an existing credential); their live device flow is manual-only.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import stat
+from pathlib import Path
+
+import pytest
+
+from agent_gateway.auth import authenticate
+from agent_gateway.errors import AuthError
+from agent_gateway.paths import Paths, get_paths
+from agent_gateway.providers import Provider
+from agent_gateway.providers.base import AuthState, AuthStatus, ProviderAdapter
+from agent_gateway.providers.chatgpt import ChatGPTAdapter
+from agent_gateway.providers.copilot import CopilotAdapter
+
+posix_only = pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics")
+
+
+class FakeAdapter(ProviderAdapter):
+    """A fake provider whose 'device flow' just writes a token file (or fails)."""
+
+    provider = Provider.chatgpt
+    display_name = "Fake Provider"
+
+    def __init__(self, *, behavior: str = "success", token: str = "tok-new") -> None:
+        self.behavior = behavior
+        self.token = token
+        self.device_flow_called = False
+
+    def process_env(self, token_dir: Path) -> dict[str, str]:
+        return {"FAKE_TOKEN_DIR": str(token_dir)}
+
+    def run_device_flow(self, token_dir: Path, *, model: str | None = None) -> None:
+        self.device_flow_called = True
+        if self.behavior == "cancel":
+            raise AuthError("user cancelled")
+        payload = {} if self.behavior == "invalid" else {"access_token": self.token}
+        (token_dir / "auth.json").write_text(json.dumps(payload))
+
+    def probe_staged(self, token_dir: Path) -> None:
+        data = json.loads((token_dir / "auth.json").read_text())
+        if not data.get("access_token"):
+            raise AuthError("probe failed: no token")
+
+    def auth_state(self, paths: Paths) -> AuthState:
+        auth_file = self.active_token_dir(paths) / "auth.json"
+        if not auth_file.is_file():
+            return AuthState(AuthStatus.missing, "none")
+        data = json.loads(auth_file.read_text())
+        status = AuthStatus.authenticated if data.get("access_token") else AuthStatus.missing
+        return AuthState(status, "present")
+
+
+def _paths(tmp_path: Path) -> Paths:
+    return get_paths({"HOME": str(tmp_path)})
+
+
+# --------------------------------------------------------------------------- #
+# Orchestration
+# --------------------------------------------------------------------------- #
+def test_success_creates_active_credentials(tmp_path):
+    paths = _paths(tmp_path)
+    state = authenticate(paths, FakeAdapter(), isatty=True)
+    assert state.status is AuthStatus.authenticated
+    assert (paths.credentials_dir / "chatgpt" / "auth.json").is_file()
+
+
+def test_touches_only_its_own_provider_tree(tmp_path):
+    paths = _paths(tmp_path)
+    authenticate(paths, FakeAdapter(), isatty=True)
+    assert (paths.credentials_dir / "chatgpt").is_dir()
+    assert not (paths.credentials_dir / "copilot").exists()
+
+
+def test_cancel_never_reports_authenticated(tmp_path):
+    paths = _paths(tmp_path)
+    with pytest.raises(AuthError):
+        authenticate(paths, FakeAdapter(behavior="cancel"), isatty=True)
+    # No active credential, and no leftover staging directory.
+    assert FakeAdapter().auth_state(paths).status is AuthStatus.missing
+    assert not (paths.credentials_dir / ".chatgpt.staging").exists()
+
+
+def test_forced_reauth_cancel_preserves_prior_credentials(tmp_path):
+    paths = _paths(tmp_path)
+    authenticate(paths, FakeAdapter(token="original-token"), isatty=True)
+    active_file = paths.credentials_dir / "chatgpt" / "auth.json"
+    original_bytes = active_file.read_bytes()
+
+    with pytest.raises(AuthError):
+        authenticate(paths, FakeAdapter(behavior="cancel"), force=True, isatty=True)
+
+    assert active_file.read_bytes() == original_bytes  # byte-for-byte preserved
+
+
+def test_invalid_staged_probe_fails_and_creates_no_active(tmp_path):
+    paths = _paths(tmp_path)
+    with pytest.raises(AuthError):
+        authenticate(paths, FakeAdapter(behavior="invalid"), isatty=True)
+    assert not (paths.credentials_dir / "chatgpt").exists()
+
+
+def test_non_tty_fails_before_device_flow(tmp_path):
+    paths = _paths(tmp_path)
+    adapter = FakeAdapter()
+    with pytest.raises(AuthError, match="TTY"):
+        authenticate(paths, adapter, isatty=False)
+    assert adapter.device_flow_called is False
+
+
+def test_already_authenticated_skips_device_flow(tmp_path):
+    paths = _paths(tmp_path)
+    authenticate(paths, FakeAdapter(), isatty=True)
+    again = FakeAdapter()
+    state = authenticate(paths, again, isatty=True)  # not forced
+    assert state.status is AuthStatus.authenticated
+    assert again.device_flow_called is False
+
+
+@posix_only
+def test_credentials_have_restrictive_permissions(tmp_path):
+    paths = _paths(tmp_path)
+    authenticate(paths, FakeAdapter(), isatty=True)
+    active = paths.credentials_dir / "chatgpt"
+    assert stat.S_IMODE(active.stat().st_mode) == 0o700
+    assert stat.S_IMODE((active / "auth.json").stat().st_mode) == 0o600
+
+
+# --------------------------------------------------------------------------- #
+# Real adapters — pure/offline logic only
+# --------------------------------------------------------------------------- #
+def test_chatgpt_process_env(tmp_path):
+    env = ChatGPTAdapter().process_env(tmp_path)
+    assert env["CHATGPT_TOKEN_DIR"] == str(tmp_path)
+    assert env["CHATGPT_AUTH_FILE"] == "auth.json"
+
+
+def test_chatgpt_auth_state_transitions(tmp_path):
+    paths = _paths(tmp_path)
+    adapter = ChatGPTAdapter()
+    assert adapter.auth_state(paths).status is AuthStatus.missing
+
+    active = adapter.active_token_dir(paths)
+    active.mkdir(parents=True)
+    active_file = active / "auth.json"
+
+    active_file.write_text(json.dumps({"access_token": "x", "expires_at": 9999999999}))
+    assert adapter.auth_state(paths).status is AuthStatus.authenticated
+
+    active_file.write_text(json.dumps({"access_token": "x", "expires_at": 1}))
+    assert adapter.auth_state(paths).status is AuthStatus.expired
+
+    # Expired but refreshable -> still usable (LiteLLM refreshes at call time).
+    active_file.write_text(json.dumps({"access_token": "x", "expires_at": 1, "refresh_token": "r"}))
+    assert adapter.auth_state(paths).status is AuthStatus.authenticated
+
+
+def test_copilot_process_env_and_state(tmp_path):
+    paths = _paths(tmp_path)
+    adapter = CopilotAdapter()
+    assert adapter.process_env(tmp_path) == {"GITHUB_COPILOT_TOKEN_DIR": str(tmp_path)}
+    assert adapter.auth_state(paths).status is AuthStatus.missing
+
+    active = adapter.active_token_dir(paths)
+    active.mkdir(parents=True)
+    (active / "access-token").write_text("ghu_faketoken")
+    assert adapter.auth_state(paths).status is AuthStatus.authenticated

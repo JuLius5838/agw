@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "usage-ui": {
+      "command": "__AGW_PYTHON_EXECUTABLE__",
+      "args": ["-I", "-m", "__AGW_MODULE__", "claude-extension-server"]
+    }
+  }
+}

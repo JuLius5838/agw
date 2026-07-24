@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "agent-gateway",
+  "description": "Private marketplace for Agent Gateway: add subscription-backed external models while preserving native Claude login.",
+  "owner": {
+    "name": "Julien Fresnel"
+  },
+  "plugins": [
+    {
+      "name": "agent-gateway",
+      "source": "./",
+      "description": "Add ChatGPT/Codex and Copilot subscription models to Claude Code while preserving native Claude login.",
+      "category": "model-routing"
+    }
+  ]
+}

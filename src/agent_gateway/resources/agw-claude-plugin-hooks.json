@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "UserPromptExpansion": [
+      {
+        "matcher": "agw-usage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "__AGW_PYTHON_EXECUTABLE__",
+            "args": ["-I", "-m", "__AGW_MODULE__", "claude-usage-guard"],
+            "timeout": 330
+          },
+          {
+            "type": "mcp_tool",
+            "server": "plugin:agent-gateway:usage-ui",
+            "tool": "show_usage",
+            "timeout": 330,
+            "input": {
+              "session_id": "${session_id}"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
