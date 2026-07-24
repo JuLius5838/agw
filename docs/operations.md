@@ -7,6 +7,8 @@
 | `agw setup [--default-model M] [--provider-owner M=P] [--agent-teams/--no-agent-teams] [--enable-shell SHELL\|--no-shell]` | Install local state, resolve models, persist choices. Non-destructive; idempotent. |
 | `agw auth chatgpt [--model M] [--force]` | Authenticate a ChatGPT/Codex subscription (needs a TTY). Claude authentication remains in native Claude Code. |
 | `agw models list [--all] [--json]` | Active models (with `--all`, inactive candidates too). |
+| `agw models add NAME [-p PROVIDER] [-u UPSTREAM] [-m responses\|chat] [--display-name L] [--no-enable] [--default]` | Append a validated model to the registry. Provider defaults to `chatgpt` and upstream to `chatgpt/NAME`. Never overwrites an existing name+provider. |
+| `agw models remove NAME [-p PROVIDER]` | Remove a model from the registry; clears `default_model` if it no longer resolves. `--provider` disambiguates a name with multiple candidates. |
 | `agw models verify [MODEL]` | Anthropic-protocol compatibility checks through the proxy. |
 | `agw usage [--json]` | Unified Claude subscription windows and live Codex limits, reset credits, and token activity. |
 | `agw proxy start\|stop\|restart\|status` | Manage the loopback proxy. `restart` is the only path that applies a changed config/version. |

@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses a single version for
 the plugin and the runtime, bumped together on every release.
 
+## [Unreleased]
+
+### Added
+- `agw models add NAME` and `agw models remove NAME`: validated registry edits that
+  append or remove an external model without hand-editing `models.yaml`. `add`
+  defaults provider `chatgpt` and upstream `chatgpt/NAME`, refuses to overwrite an
+  existing name+provider, and supports `--display-name`, `--no-enable`, and
+  `--default`; `remove` clears `default_model` when the name no longer resolves.
+  Both re-validate the whole registry before writing and never restart the proxy.
+- Packaged `gpt-5.6-terra` and `gpt-5.6-luna` candidates (disabled by default)
+  alongside `gpt-5.6-sol`, each with a picker `display_name`, so fresh installs can
+  enable them without editing YAML.
+- `gateway-add-model` skill guiding Claude Code to add or remove a model through the
+  validated commands, with exact-name and no-fallback rules.
+
 ## [0.2.0] - 2026-07-24
 
 ### Removed

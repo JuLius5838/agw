@@ -46,20 +46,54 @@ models:
     enabled: true
 
   - name: gpt-5.6-terra
+    display_name: GPT 5.6 Terra
     provider: chatgpt
     upstream_model: chatgpt/gpt-5.6-terra
     mode: responses
     enabled: true
+
+  - name: gpt-5.6-luna
+    display_name: GPT 5.6 Luna
+    provider: chatgpt
+    upstream_model: chatgpt/gpt-5.6-luna
+    mode: responses
+    enabled: true
 ```
 
-With this registry, `claude` starts with Claude Code's native model and `/model gpt-5.6-sol`
-switches the next request to Codex.
+With this registry, all three external names are selectable, while `claude` still starts
+with Claude Code's native model because `default_model` is `null`. Set `default_model` to
+one enabled external name only if `claude` should start on that model by default.
 
 Validation enforces: exact-name (no `/`), provider-prefix match, valid mode, one active
 entry per name, and—when set—that `default_model` resolves to an active external entry.
 `agw setup` installs the packaged registry on first run and preserves local edits.
-If an upgrade retires a provider entry, it first saves the original registry as
+Packaged candidates therefore appear automatically for new installations only. Existing
+users add a new exact-name entry to their local `models.yaml`; AGW intentionally does not
+merge candidates into a user-edited registry during an upgrade. If an upgrade retires a
+provider entry, it first saves the original registry as
 `models.pre-retired-providers.yaml` with mode `0600`, then migrates `models.yaml`.
+
+`enabled` controls whether an external model is available to route. The top-level
+`default_model` does not add a model; it only selects the startup model and must name an
+enabled entry. Leave it `null` to preserve Claude Code's native startup selection.
+
+## Adding and removing models
+
+Prefer the validated commands over hand-editing `models.yaml`. They re-validate the whole
+registry before writing, so a bad entry fails without changing the file:
+
+```bash
+agw models add gpt-5.6-luna                 # provider chatgpt, upstream chatgpt/gpt-5.6-luna, enabled
+agw models add gpt-5.6-luna --no-enable     # add as a disabled candidate
+agw models add gpt-5.6-luna --default       # also make it the startup model (implies enable)
+agw models add my-model -u chatgpt/actual-slug --display-name "My Model"
+agw models remove gpt-5.6-luna              # -p/--provider disambiguates a shared name
+```
+
+`add` never overwrites an existing name+provider, and `remove` clears `default_model` when
+the removed name no longer resolves. Neither restarts the gateway — run `agw proxy restart`
+to apply the change to a running session, and `agw models verify NAME` (after
+`agw auth chatgpt`) to confirm a newly enabled model actually works.
 
 To rename the picker entry, edit only `display_name` in
 `~/.config/agent-gateway/models.yaml`, then start a new `claude` session. Keep `name` and

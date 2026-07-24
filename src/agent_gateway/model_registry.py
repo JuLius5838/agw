@@ -230,3 +230,124 @@ def load_registry(paths: Paths) -> ModelRegistry:
 def load_default_registry() -> ModelRegistry:
     """Load the packaged, credential-free team default registry."""
     return load_registry_text(packaged_default_models_yaml())
+
+
+def _load_registry_data(text: str) -> dict[str, object]:
+    """Parse registry YAML into a mutable mapping with a guaranteed ``models`` list."""
+    try:
+        raw = yaml.safe_load(text) or {}
+    except yaml.YAMLError as exc:
+        raise ConfigError(f"could not parse model registry: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise ConfigError("model registry must be a top-level mapping.")
+    models = raw.get("models")
+    if models is None:
+        raw["models"] = []
+    elif not isinstance(models, list):
+        raise ConfigError("model registry must contain a 'models' list.")
+    return raw
+
+
+def add_model_to_registry_text(
+    text: str,
+    *,
+    name: str,
+    provider: Provider,
+    upstream_model: str,
+    mode: ModelMode,
+    display_name: str | None = None,
+    enabled: bool = True,
+    make_default: bool = False,
+) -> str:
+    """Return new registry YAML with one validated model appended.
+
+    Per-field rules are enforced by :class:`ModelEntry`; whole-registry
+    invariants (exact name, one active entry per name, ``default_model`` resolves
+    to an active entry) are enforced by re-validating the full document before
+    returning. Never overwrites an existing ``name``/``provider`` pair.
+    """
+    try:
+        entry = ModelEntry(
+            name=name,
+            display_name=display_name,
+            provider=provider,
+            upstream_model=upstream_model,
+            mode=mode,
+            enabled=enabled,
+        )
+    except ValidationError as exc:
+        raise ConfigError(f"invalid model '{name}': {exc}") from exc
+    data = _load_registry_data(text)
+    models: list[object] = data["models"]  # type: ignore[assignment]
+    for existing in models:
+        if (
+            isinstance(existing, dict)
+            and existing.get("name") == entry.name
+            and existing.get("provider") == entry.provider.value
+        ):
+            raise ConfigError(
+                f"model '{entry.name}' already exists for provider '{entry.provider.value}'.",
+                hint="Remove it first with `agw models remove`, or choose a different name.",
+            )
+    # Insert keys in the registry's canonical order for a readable file.
+    new_entry: dict[str, object] = {"name": entry.name}
+    if entry.display_name is not None:
+        new_entry["display_name"] = entry.display_name
+    new_entry["provider"] = entry.provider.value
+    new_entry["upstream_model"] = entry.upstream_model
+    new_entry["mode"] = entry.mode.value
+    new_entry["enabled"] = entry.enabled
+    models.append(new_entry)
+    if make_default:
+        data["default_model"] = entry.name
+    new_text = yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
+    load_registry_text(new_text)  # enforce whole-registry invariants; raises ConfigError
+    return new_text
+
+
+def remove_model_from_registry_text(
+    text: str,
+    *,
+    name: str,
+    provider: Provider | None = None,
+) -> str:
+    """Return new registry YAML with the matching model removed.
+
+    Clears ``default_model`` when the removed name no longer resolves to an
+    active entry, mirroring the retired-provider migration. Raises when the name
+    is absent, or when it is ambiguous across providers and none was given.
+    """
+    data = _load_registry_data(text)
+    models: list[object] = data["models"]  # type: ignore[assignment]
+
+    def _matches(item: object) -> bool:
+        return (
+            isinstance(item, dict)
+            and item.get("name") == name
+            and (provider is None or item.get("provider") == provider.value)
+        )
+
+    matches = [m for m in models if _matches(m)]
+    if not matches:
+        scope = f" for provider '{provider.value}'" if provider is not None else ""
+        raise ModelUnavailableError(
+            f"model '{name}'{scope} is not configured.",
+            hint="Run `agw models list --all` to see configured models.",
+        )
+    providers = {m.get("provider") for m in matches if isinstance(m, dict)}
+    if provider is None and len(providers) > 1:
+        listed = ", ".join(sorted(str(p) for p in providers))
+        raise ConfigError(
+            f"model '{name}' has multiple provider candidates: {listed}.",
+            hint="Disambiguate with `agw models remove NAME --provider PROVIDER`.",
+        )
+    remaining: list[object] = [m for m in models if not _matches(m)]
+    data["models"] = remaining
+    active_names = {
+        m.get("name") for m in remaining if isinstance(m, dict) and m.get("enabled") is True
+    }
+    if data.get("default_model") == name and name not in active_names:
+        data["default_model"] = None
+    new_text = yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
+    load_registry_text(new_text)  # enforce whole-registry invariants; raises ConfigError
+    return new_text

@@ -174,6 +174,36 @@ def test_models_list_json_after_setup(tmp_path) -> None:
     assert not doc["models"]
 
 
+def test_models_add_and_remove_roundtrip(tmp_path) -> None:
+    env = _isolated_env(tmp_path, native_claude=True)
+
+    def run(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "-m", "agent_gateway", *args],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    assert run("setup").returncode == 0
+
+    added = run("models", "add", "gpt-5.6-example")
+    assert added.returncode == 0, added.stderr
+    doc = json.loads(run("models", "list", "--json").stdout)
+    assert "gpt-5.6-example" in {m["name"] for m in doc["models"]}
+
+    # Re-adding the same name+provider is rejected rather than silently overwriting.
+    assert run("models", "add", "gpt-5.6-example").returncode != 0
+
+    removed = run("models", "remove", "gpt-5.6-example")
+    assert removed.returncode == 0, removed.stderr
+    doc_after = json.loads(run("models", "list", "--json").stdout)
+    assert "gpt-5.6-example" not in {m["name"] for m in doc_after["models"]}
+
+    # Removing an unknown model is a clean model-unavailable failure, not a crash.
+    assert run("models", "remove", "gpt-5.6-example").returncode == ExitCode.MODEL_UNAVAILABLE
+
+
 def test_usage_json_degrades_cleanly_without_provider_auth(tmp_path) -> None:
     env = {**os.environ, "HOME": str(tmp_path)}
     env.pop("XDG_CONFIG_HOME", None)

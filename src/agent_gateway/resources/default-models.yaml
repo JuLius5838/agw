@@ -33,3 +33,17 @@ models:
     upstream_model: chatgpt/gpt-5.6-sol
     mode: responses
     enabled: false
+
+  - name: gpt-5.6-terra
+    display_name: GPT 5.6 Terra
+    provider: chatgpt
+    upstream_model: chatgpt/gpt-5.6-terra
+    mode: responses
+    enabled: false
+
+  - name: gpt-5.6-luna
+    display_name: GPT 5.6 Luna
+    provider: chatgpt
+    upstream_model: chatgpt/gpt-5.6-luna
+    mode: responses
+    enabled: false

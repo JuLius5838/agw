@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_JSON = REPO_ROOT / ".claude-plugin" / "plugin.json"
 MARKETPLACE_JSON = REPO_ROOT / ".claude-plugin" / "marketplace.json"
 SKILLS_DIR = REPO_ROOT / "skills"
-EXPECTED_SKILLS = {"gateway-setup", "gateway-doctor", "model-routing"}
+EXPECTED_SKILLS = {"gateway-setup", "gateway-doctor", "model-routing", "gateway-add-model"}
 
 
 def _package_version() -> str:

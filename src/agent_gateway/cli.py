@@ -237,6 +237,126 @@ def models_verify(
         raise ModelUnavailableError("one or more models failed Claude-compatibility verification.")
 
 
+@models_app.command("add")
+@handle_errors
+def models_add(
+    name: Annotated[
+        str,
+        typer.Argument(help="Exact public model name (no provider prefix)."),
+    ],
+    provider: Annotated[
+        Provider,
+        typer.Option("--provider", "-p", help="Subscription provider."),
+    ] = Provider.chatgpt,
+    upstream_model: Annotated[
+        str | None,
+        typer.Option(
+            "--upstream-model",
+            "-u",
+            help="Upstream model id; defaults to '<provider-prefix><name>'.",
+        ),
+    ] = None,
+    mode: Annotated[
+        str,
+        typer.Option("--mode", "-m", help="Upstream API shape: 'responses' or 'chat'."),
+    ] = "responses",
+    display_name: Annotated[
+        str | None,
+        typer.Option("--display-name", help="Optional picker label; never changes routing."),
+    ] = None,
+    enable: Annotated[
+        bool,
+        typer.Option("--enable/--no-enable", help="Activate the model immediately."),
+    ] = True,
+    make_default: Annotated[
+        bool,
+        typer.Option("--default", help="Also set it as the startup model (implies --enable)."),
+    ] = False,
+) -> None:
+    """Add an external model to the registry (validated; never overwrites a name+provider)."""
+    from agent_gateway.config import load_config
+    from agent_gateway.errors import ConfigError
+    from agent_gateway.model_registry import (
+        ModelMode,
+        add_model_to_registry_text,
+        load_registry_text,
+    )
+    from agent_gateway.models import list_models, render_table
+    from agent_gateway.paths import SECRET_FILE_MODE, atomic_write_text, get_paths, read_text
+    from agent_gateway.providers import PROVIDER_PREFIX
+
+    paths = get_paths()
+    load_config(paths)  # ensures setup has run; raises ConfigError otherwise
+    if not paths.models_file.exists():
+        raise ConfigError("model registry not found.", hint="Run `agw setup` first.")
+    try:
+        mode_enum = ModelMode(mode)
+    except ValueError as exc:
+        raise ConfigError(f"invalid --mode '{mode}'.", hint="Use 'responses' or 'chat'.") from exc
+    if make_default:
+        enable = True
+    upstream = upstream_model or f"{PROVIDER_PREFIX[provider]}{name}"
+
+    new_text = add_model_to_registry_text(
+        read_text(paths.models_file),
+        name=name,
+        provider=provider,
+        upstream_model=upstream,
+        mode=mode_enum,
+        display_name=display_name,
+        enabled=enable,
+        make_default=make_default,
+    )
+    atomic_write_text(paths.models_file, new_text, mode=SECRET_FILE_MODE)
+
+    registry = load_registry_text(new_text)
+    typer.secho(f"✓ added {name} ({provider.value})", fg=typer.colors.GREEN)
+    typer.echo(render_table(list_models(registry, include_inactive=True)))
+    if enable:
+        typer.echo(f"  - authenticate if needed: agw auth {provider.value}")
+        typer.echo(f"  - verify Claude compatibility: agw models verify {name}")
+    typer.echo("  - apply to a running gateway: agw proxy restart")
+
+
+@models_app.command("remove")
+@handle_errors
+def models_remove(
+    name: Annotated[
+        str,
+        typer.Argument(help="Exact public model name to remove."),
+    ],
+    provider: Annotated[
+        Provider | None,
+        typer.Option(
+            "--provider",
+            "-p",
+            help="Disambiguate when the name has candidates for more than one provider.",
+        ),
+    ] = None,
+) -> None:
+    """Remove a model from the registry (validated; clears default if it no longer resolves)."""
+    from agent_gateway.config import load_config
+    from agent_gateway.errors import ConfigError
+    from agent_gateway.model_registry import load_registry_text, remove_model_from_registry_text
+    from agent_gateway.models import list_models, render_table
+    from agent_gateway.paths import SECRET_FILE_MODE, atomic_write_text, get_paths, read_text
+
+    paths = get_paths()
+    load_config(paths)  # ensures setup has run; raises ConfigError otherwise
+    if not paths.models_file.exists():
+        raise ConfigError("model registry not found.", hint="Run `agw setup` first.")
+
+    new_text = remove_model_from_registry_text(
+        read_text(paths.models_file), name=name, provider=provider
+    )
+    atomic_write_text(paths.models_file, new_text, mode=SECRET_FILE_MODE)
+
+    registry = load_registry_text(new_text)
+    typer.secho(f"✓ removed {name}", fg=typer.colors.GREEN)
+    typer.echo(render_table(list_models(registry, include_inactive=True)))
+    typer.echo("  - apply to a running gateway: agw proxy restart")
+
+
 # --------------------------------------------------------------------------- #
 # unified usage
 # --------------------------------------------------------------------------- #
