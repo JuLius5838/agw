@@ -122,6 +122,103 @@ def test_native_request_preserves_auth_beta_and_raw_body():
     assert "x-agw-key" not in seen[0].headers
 
 
+def test_native_request_removes_only_empty_unsigned_thinking_blocks() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, content=b"native")
+
+    response = _send(
+        handler,
+        "POST",
+        "/v1/messages",
+        json={
+            "model": "claude-opus-4-8",
+            "messages": [
+                {"role": "user", "content": "start"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "thinking", "thinking": "", "signature": ""},
+                        {"type": "text", "text": "GPT answer"},
+                    ],
+                },
+                {"role": "user", "content": "continue with Claude"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "thinking",
+                            "thinking": "",
+                            "signature": "valid-claude-signature",
+                        },
+                        {"type": "redacted_thinking", "data": "encrypted"},
+                        {
+                            "type": "thinking",
+                            "thinking": "visible summary",
+                            "signature": "",
+                        },
+                        {
+                            "type": "tool_use",
+                            "id": "tool-1",
+                            "name": "Read",
+                            "input": {},
+                        },
+                    ],
+                },
+            ],
+        },
+        headers={"X-AGW-Key": "local-key"},
+    )
+
+    assert response.status_code == 200
+    forwarded = json.loads(seen[0].content)
+    first_assistant = forwarded["messages"][1]["content"]
+    assert first_assistant == [{"type": "text", "text": "GPT answer"}]
+    preserved = forwarded["messages"][3]["content"]
+    assert [block["type"] for block in preserved] == [
+        "thinking",
+        "redacted_thinking",
+        "thinking",
+        "tool_use",
+    ]
+    assert preserved[0]["signature"] == "valid-claude-signature"
+
+
+def test_native_request_drops_assistant_message_left_empty_by_cleanup() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, content=b"native")
+
+    response = _send(
+        handler,
+        "POST",
+        "/v1/messages/count_tokens",
+        json={
+            "model": "claude-opus-4-8",
+            "messages": [
+                {"role": "user", "content": "start"},
+                {
+                    "role": "assistant",
+                    "content": [{"type": "thinking", "thinking": "", "signature": ""}],
+                },
+                {"role": "user", "content": "continue"},
+            ],
+        },
+        headers={"X-AGW-Key": "local-key"},
+    )
+
+    assert response.status_code == 200
+    forwarded = json.loads(seen[0].content)
+    assert forwarded["messages"] == [
+        {"role": "user", "content": "start"},
+        {"role": "user", "content": "continue"},
+    ]
+
+
 def test_external_request_rewrites_picker_id_and_never_leaks_claude_auth():
     seen: list[httpx.Request] = []
 

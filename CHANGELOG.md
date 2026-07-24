@@ -7,6 +7,11 @@ the plugin and the runtime, bumped together on every release.
 ## [Unreleased]
 
 ### Fixed
+- Conversations can switch between ChatGPT/Codex and native Claude models
+  without invalid historical reasoning blocks breaking the next request or
+  `/compact`. GPT reasoning items remain provider-private, while native routes
+  remove legacy empty-and-unsigned thinking placeholders and preserve signed
+  Claude omitted-thinking and redacted-thinking blocks.
 - `/agw-usage` can be reopened repeatedly in one Claude Code session. The
   fail-closed command guard now waits until the MCP elicitation has returned
   and the tool response is written before blocking slash-command expansion,
@@ -56,14 +61,18 @@ the plugin and the runtime, bumped together on every release.
   rejection and no fallback.
 - Plugin manifests + `gateway-setup`, `gateway-doctor`, and `model-routing` skills.
 - Security & CI: gitleaks config, shellcheck, dependency-policy guard (forbids compromised
-  LiteLLM `1.82.7`/`1.82.8`), secret-hygiene and raw-log canary tests, GitLab CI pipeline.
+  LiteLLM `1.82.7`/`1.82.8`), secret-hygiene and raw-log canary tests, GitLab CI, GitHub
+  Actions CI, CodeQL, dependency review, and Dependabot.
+- Public repository metadata: Apache-2.0 license, contribution guidance, issue and pull
+  request templates, personal ownership, and public Claude Code marketplace instructions.
 - Docs: architecture, security/threat-model, operations, model-selection, compatibility
-  report (Gate A), and policy-decision record.
+  report (Gate A), and adopter policy-decision template.
 
 ### Pinned
-- Agent Gateway `0.1.8`; LiteLLM `1.93.0`; Python `3.12`; minimum Claude Code
+- Agent Gateway `0.1.9`; LiteLLM `1.93.0`; Python `3.12`; minimum Claude Code
   `2.1.211` (tested on `2.1.218`).
 
 ### Notes
-- Live provider pilot (Gate C) and the organization policy sign-off (Gate D) are pending;
-  see `docs/compatibility-report.md` and `docs/policy-decision.md`.
+- Live provider pilot (Gate C) remains pending. Each user or adopting organization must also
+  complete its own provider-policy review before enabling external routes; see
+  `docs/compatibility-report.md` and `docs/policy-decision.md`.

@@ -1,0 +1,76 @@
+name: Bug report
+description: Report a reproducible Agent Gateway problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Do not include credentials, OAuth codes, proxy keys, prompts, or private repository content. Report security vulnerabilities through GitHub private vulnerability reporting instead of this form.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and did not find this problem.
+          required: true
+        - label: This report contains no credentials, OAuth codes, proxy keys, prompts, or private source content.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: AGW version
+      placeholder: "0.1.8"
+    validations:
+      required: true
+
+  - type: input
+    id: claude-version
+    attributes:
+      label: Claude Code version
+      placeholder: "2.1.218"
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: "macOS 15 arm64, Ubuntu 24.04 x86_64, ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior without including prompt or repository contents.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide the smallest safe sequence of commands or configuration needed to reproduce it.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Include only redacted output from `agw doctor` or `agw status`. Never attach raw provider credentials or request logs.
+      render: text

@@ -1,7 +1,12 @@
 # Agent Gateway (`agw`)
 
+[![CI](https://github.com/JuLius5838/agw/actions/workflows/ci.yml/badge.svg)](https://github.com/JuLius5838/agw/actions/workflows/ci.yml)
+[![Security](https://github.com/JuLius5838/agw/actions/workflows/security.yml/badge.svg)](https://github.com/JuLius5838/agw/actions/workflows/security.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 Route Claude Code through a local hybrid gateway: native Claude requests keep the saved
-Claude subscription, while exact configured GPT/Copilot names route to private LiteLLM.
+Claude subscription, while exact configured GPT/Copilot names route to a private LiteLLM
+process on your machine.
 
 ```text
                          ┌▶ Anthropic (native Claude Code OAuth)
@@ -15,19 +20,33 @@ provider prefixes such as `anthropic/` or `chatgpt/` remain private routing conf
 AGW never mints, stores, or injects a second Anthropic token. Claude traffic is forwarded
 with Claude Code's saved login; only external model selections enter LiteLLM.
 
-## Install (private marketplace)
+## Install
+
+AGW requires Claude Code, Python 3.12, and
+[`uv`](https://docs.astral.sh/uv/). Add the public marketplace and install the plugin:
 
 ```bash
-claude plugin marketplace add <your-private-git-url-or-local-path>
+claude plugin marketplace add JuLius5838/agw
 claude plugin install agent-gateway@agent-gateway
 ```
 
-Then run the setup skill (or the bundled bootstrap directly), which installs the pinned
-`agw` runtime with [`uv`](https://docs.astral.sh/uv/) and runs `agw setup`:
+Restart Claude Code or run `/reload-plugins`, then invoke the bundled setup skill:
+
+```text
+/agent-gateway:gateway-setup
+```
+
+The skill runs the bundled bootstrap, which installs the pinned `agw` runtime with `uv`
+and starts `agw setup`. To run the bootstrap directly from a local checkout instead:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap.sh"
+git clone https://github.com/JuLius5838/agw.git
+cd agw
+bash ./scripts/bootstrap.sh
 ```
+
+External routes ship disabled. Setup remains native-Claude-only until you explicitly enable
+and authenticate an exact model/provider pair.
 
 ## Daily use
 
@@ -102,6 +121,26 @@ Create two teammates: use gpt-5.6-sol for implementation and <other-model> for r
 See [`docs/`](docs/) for architecture, security/threat-model, operations, model selection,
 the compatibility report, and the policy decision. Full command reference:
 [`docs/operations.md`](docs/operations.md).
+
+## Project status
+
+AGW is an independent personal open-source project maintained by
+[Julien Fresnel](https://github.com/JuLius5838). It is not affiliated with or endorsed by
+Anthropic, OpenAI, GitHub, or LiteLLM. Anthropic does not support routing Claude Code to
+non-Claude models; external-provider support is therefore compatibility-gated and may break
+when upstream clients or provider adapters change.
+
+The automated suite covers the offline routing and security contracts. Real-subscription
+checks listed in [`docs/compatibility-report.md`](docs/compatibility-report.md) remain the
+release gate for provider-backed claims. Use each provider only if its account terms and
+data policy permit your intended workflow.
+
+## Contributing and security
+
+Contributions are welcome under the [Apache License 2.0](LICENSE). Read
+[`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request. Report suspected
+vulnerabilities privately through [GitHub Security Advisories](https://github.com/JuLius5838/agw/security/advisories/new),
+not a public issue; see [`SECURITY.md`](SECURITY.md).
 
 ## Development
 

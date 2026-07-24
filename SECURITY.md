@@ -2,10 +2,15 @@
 
 ## Reporting a vulnerability
 
-Report suspected vulnerabilities **privately** to the security owner (see
-`docs/policy-decision.md`) — do not open a public issue. Include a description, a
-reproduction, and the affected version. You will get an acknowledgement within a
-few business days and a remediation/rollback plan for confirmed issues.
+Report suspected vulnerabilities through
+[GitHub private vulnerability reporting](https://github.com/JuLius5838/agw/security/advisories/new).
+Do not open a public issue and do not include credentials, OAuth codes, prompts, private
+repository content, or unredacted logs in the report.
+
+Include a description, the affected version, impact, and the smallest safe reproduction.
+The maintainer aims to acknowledge reports within five business days and will coordinate a
+remediation and disclosure timeline for confirmed issues. Please do not publicly disclose a
+vulnerability before a fix or coordinated disclosure date is available.
 
 ## Supported versions
 

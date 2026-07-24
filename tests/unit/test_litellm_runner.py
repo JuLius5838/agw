@@ -9,9 +9,11 @@ from typing import Any
 
 from agent_gateway.litellm_runner import (
     _run_server,
+    _wrap_anthropic_response_translator,
     _wrap_aresponses,
     _wrap_reasoning_effort_normalizer,
     _wrap_responses_tool_choice_translator,
+    _wrap_stream_event_processor,
     enable_chatgpt_responses_bridge,
 )
 
@@ -99,6 +101,143 @@ def test_responses_tool_choice_uses_openai_scalar_values() -> None:
         "type": "function",
         "name": "WebSearch",
     }
+
+
+def test_streaming_response_suppresses_reasoning_and_reindexes_text() -> None:
+    from litellm.llms.anthropic.experimental_pass_through.responses_adapters import (
+        streaming_iterator,
+    )
+
+    wrapper = streaming_iterator.AnthropicResponsesStreamWrapper(
+        responses_stream=None,
+        model="gpt-5.6-sol",
+    )
+    process = _wrap_stream_event_processor(
+        streaming_iterator.AnthropicResponsesStreamWrapper._process_event
+    )
+    process(
+        wrapper,
+        {
+            "type": "response.output_item.added",
+            "item": {"type": "reasoning", "id": "reasoning-1"},
+        },
+    )
+    process(
+        wrapper,
+        {
+            "type": "response.reasoning_summary_text.delta",
+            "item_id": "reasoning-1",
+            "delta": "private summary",
+        },
+    )
+    process(
+        wrapper,
+        {
+            "type": "response.output_item.done",
+            "item": {"type": "reasoning", "id": "reasoning-1"},
+        },
+    )
+    process(
+        wrapper,
+        {
+            "type": "response.output_item.added",
+            "item": {"type": "message", "id": "message-1"},
+        },
+    )
+    process(
+        wrapper,
+        {
+            "type": "response.output_text.delta",
+            "item_id": "message-1",
+            "delta": "answer",
+        },
+    )
+
+    chunks = list(wrapper._chunk_queue)
+    assert chunks == [
+        {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "text", "text": ""},
+        },
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "text_delta", "text": "answer"},
+        },
+    ]
+
+
+def test_streaming_response_keeps_tool_use_after_suppressed_reasoning() -> None:
+    from litellm.llms.anthropic.experimental_pass_through.responses_adapters import (
+        streaming_iterator,
+    )
+
+    wrapper = streaming_iterator.AnthropicResponsesStreamWrapper(
+        responses_stream=None,
+        model="gpt-5.6-sol",
+    )
+    process = _wrap_stream_event_processor(
+        streaming_iterator.AnthropicResponsesStreamWrapper._process_event
+    )
+    process(
+        wrapper,
+        {
+            "type": "response.output_item.added",
+            "item": {"type": "reasoning", "id": "reasoning-1"},
+        },
+    )
+    process(
+        wrapper,
+        {
+            "type": "response.output_item.done",
+            "item": {"type": "reasoning", "id": "reasoning-1"},
+        },
+    )
+    process(
+        wrapper,
+        {
+            "type": "response.output_item.added",
+            "item": {
+                "type": "function_call",
+                "id": "call-item-1",
+                "call_id": "call-1",
+                "name": "Read",
+            },
+        },
+    )
+
+    chunks = list(wrapper._chunk_queue)
+    assert chunks == [
+        {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {
+                "type": "tool_use",
+                "id": "call-1",
+                "name": "Read",
+                "input": {},
+            },
+        }
+    ]
+
+
+def test_nonstream_response_suppresses_unsigned_reasoning_summary() -> None:
+    translated = SimpleNamespace(
+        content=[
+            {"type": "thinking", "thinking": "private summary", "signature": None},
+            {"type": "text", "text": "answer"},
+        ]
+    )
+
+    def original(_adapter: Any, _response: Any) -> Any:
+        return translated
+
+    wrapped = _wrap_anthropic_response_translator(original)
+    result = wrapped(object(), object())
+
+    assert result is translated
+    assert result.content == [{"type": "text", "text": "answer"}]
 
 
 def test_claude_effort_reaches_chatgpt_unchanged() -> None:

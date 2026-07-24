@@ -21,6 +21,12 @@ The pinned Anthropic→Responses adapter also serializes ``auto`` and ``required
 tool choices as objects, while the Responses API requires scalar strings. AGW
 normalizes those two values so Claude Code's client-side WebSearch tool can run.
 
+OpenAI reasoning items are provider-private and do not carry Anthropic thinking
+signatures. The pinned streaming adapter exposes them as empty, unsigned
+Anthropic ``thinking`` blocks, which corrupts Claude Code history when a session
+later switches to Claude. AGW suppresses those mislabeled blocks in both
+streaming and non-streaming responses.
+
 AGW pins LiteLLM exactly, so these compatibility fixes are deliberately narrow.
 Tests fail loudly if the pinned internal surfaces change during an upgrade.
 """
@@ -34,6 +40,8 @@ from typing import Any
 _WRAPPER_MARKER = "__agw_chatgpt_nonstream_bridge__"
 _EFFORT_WRAPPER_MARKER = "__agw_chatgpt_effort_bridge__"
 _TOOL_CHOICE_WRAPPER_MARKER = "__agw_responses_tool_choice_bridge__"
+_STREAM_REASONING_WRAPPER_MARKER = "__agw_stream_reasoning_bridge__"
+_RESPONSE_REASONING_WRAPPER_MARKER = "__agw_response_reasoning_bridge__"
 _GPT56_REASONING_EFFORTS = frozenset({"low", "medium", "high", "xhigh", "max"})
 
 
@@ -157,11 +165,90 @@ def _wrap_responses_tool_choice_translator(
     return wrapped
 
 
+def _responses_event_type(event: Any) -> str | None:
+    event_type = getattr(event, "type", None)
+    if event_type is None and isinstance(event, dict):
+        event_type = event.get("type")
+    return event_type if isinstance(event_type, str) else None
+
+
+def _responses_item(event: Any) -> Any:
+    item = getattr(event, "item", None)
+    if item is None and isinstance(event, dict):
+        item = event.get("item")
+    return item
+
+
+def _responses_item_type(item: Any) -> str | None:
+    item_type = getattr(item, "type", None)
+    if item_type is None and isinstance(item, dict):
+        item_type = item.get("type")
+    return item_type if isinstance(item_type, str) else None
+
+
+def _wrap_stream_event_processor(
+    original: Callable[[Any, Any], None],
+) -> Callable[[Any, Any], None]:
+    """Keep OpenAI reasoning items out of Anthropic streaming content blocks."""
+    if getattr(original, _STREAM_REASONING_WRAPPER_MARKER, False):
+        return original
+
+    @wraps(original)
+    def wrapped(stream: Any, event: Any) -> None:
+        event_type = _responses_event_type(event)
+        if event_type is not None and event_type.startswith("response.reasoning_"):
+            return
+        if (
+            event_type in {"response.output_item.added", "response.output_item.done"}
+            and _responses_item_type(_responses_item(event)) == "reasoning"
+        ):
+            return
+        original(stream, event)
+
+    setattr(wrapped, _STREAM_REASONING_WRAPPER_MARKER, True)
+    return wrapped
+
+
+def _content_block_type(block: Any) -> str | None:
+    block_type = getattr(block, "type", None)
+    if block_type is None and isinstance(block, dict):
+        block_type = block.get("type")
+    return block_type if isinstance(block_type, str) else None
+
+
+def _wrap_anthropic_response_translator(
+    original: Callable[[Any, Any], Any],
+) -> Callable[[Any, Any], Any]:
+    """Remove unsigned Responses reasoning summaries from non-stream replies."""
+    if getattr(original, _RESPONSE_REASONING_WRAPPER_MARKER, False):
+        return original
+
+    @wraps(original)
+    def wrapped(adapter: Any, response: Any) -> Any:
+        translated = original(adapter, response)
+        content = getattr(translated, "content", None)
+        if not isinstance(content, list):
+            return translated
+        filtered = [block for block in content if _content_block_type(block) != "thinking"]
+        if len(filtered) == len(content):
+            return translated
+        if hasattr(translated, "model_copy"):
+            return translated.model_copy(update={"content": filtered})
+        translated.content = filtered
+        return translated
+
+    setattr(wrapped, _RESPONSE_REASONING_WRAPPER_MARKER, True)
+    return wrapped
+
+
 def enable_chatgpt_responses_bridge() -> None:
     """Enable Anthropic→Responses, effort, and non-stream bridges for ChatGPT."""
     import litellm
     from litellm.llms.anthropic.experimental_pass_through import utils
     from litellm.llms.anthropic.experimental_pass_through.messages import handler
+    from litellm.llms.anthropic.experimental_pass_through.responses_adapters import (
+        streaming_iterator,
+    )
     from litellm.llms.anthropic.experimental_pass_through.responses_adapters.transformation import (
         LiteLLMAnthropicToResponsesAPIAdapter,
     )
@@ -182,6 +269,13 @@ def enable_chatgpt_responses_bridge() -> None:
         _wrap_responses_tool_choice_translator(
             LiteLLMAnthropicToResponsesAPIAdapter.translate_tool_choice_to_responses_api
         )
+    )
+    adapter_class.translate_response = _wrap_anthropic_response_translator(
+        LiteLLMAnthropicToResponsesAPIAdapter.translate_response
+    )
+    stream_class: Any = streaming_iterator.AnthropicResponsesStreamWrapper
+    stream_class._process_event = _wrap_stream_event_processor(
+        streaming_iterator.AnthropicResponsesStreamWrapper._process_event
     )
     litellm.aresponses = _wrap_aresponses(litellm.aresponses)
 

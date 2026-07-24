@@ -1,0 +1,46 @@
+name: Feature request
+description: Propose an improvement to Agent Gateway
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Explain the user problem before proposing an implementation. Never include credentials, OAuth codes, prompts, or private repository content.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and did not find this request.
+          required: true
+        - label: This request contains no credentials, OAuth codes, prompts, or private source content.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow or limitation should AGW improve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the user-visible outcome. An implementation sketch is optional.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: textarea
+    id: security
+    attributes:
+      label: Provider, security, and compatibility impact
+      description: Note any new provider data flow, credential handling, model routing, dependency, or Claude Code compatibility implications.

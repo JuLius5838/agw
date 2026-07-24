@@ -134,14 +134,64 @@ def _use_client_side_web_search(payload: dict[str, object]) -> None:
             continue
         tool_type = tool.get("type")
         tool_name = tool.get("name")
-        native_search = (
-            isinstance(tool_type, str) and tool_type.startswith("web_search_")
-        )
+        native_search = isinstance(tool_type, str) and tool_type.startswith("web_search_")
         if native_search or tool_name == "web_search":
             converted.append(_CLIENT_WEB_SEARCH_TOOL)
         else:
             converted.append(tool)
     payload["tools"] = converted
+
+
+def _strip_invalid_unsigned_thinking(payload: dict[str, object]) -> bool:
+    """Remove legacy GPT reasoning placeholders before a native Claude request.
+
+    Claude's omitted-thinking mode legitimately returns an empty ``thinking``
+    field with a non-empty Anthropic signature. Preserve those blocks, all
+    readable thinking, and redacted thinking. Only the empty, unsigned blocks
+    produced by the ChatGPT Responses compatibility adapter are invalid.
+    """
+    messages = payload.get("messages")
+    if not isinstance(messages, list):
+        return False
+
+    changed = False
+    cleaned_messages: list[object] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            cleaned_messages.append(message)
+            continue
+        content = message.get("content")
+        if not isinstance(content, list):
+            cleaned_messages.append(message)
+            continue
+
+        cleaned_content: list[object] = []
+        for block in content:
+            if not isinstance(block, dict) or block.get("type") != "thinking":
+                cleaned_content.append(block)
+                continue
+            thinking = block.get("thinking")
+            signature = block.get("signature")
+            has_thinking = isinstance(thinking, str) and bool(thinking)
+            has_signature = isinstance(signature, str) and bool(signature)
+            if has_thinking or has_signature:
+                cleaned_content.append(block)
+            else:
+                changed = True
+
+        if message.get("role") == "assistant" and content and not cleaned_content:
+            changed = True
+            continue
+        if len(cleaned_content) != len(content):
+            cleaned_message = dict(message)
+            cleaned_message["content"] = cleaned_content
+            cleaned_messages.append(cleaned_message)
+        else:
+            cleaned_messages.append(message)
+
+    if changed:
+        payload["messages"] = cleaned_messages
+    return changed
 
 
 async def _stream_upstream(
@@ -267,11 +317,18 @@ async def _messages(request: Request) -> Response:
 
     external_entry = settings.registry.resolve_routed_model(model)
     if external_entry is None:
+        native_body = body
+        if isinstance(payload, dict) and _strip_invalid_unsigned_thinking(payload):
+            native_body = json.dumps(
+                payload,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode()
         return await _stream_upstream(
             request,
             settings,
             target_base=settings.anthropic_url,
-            body=body,
+            body=native_body,
             external=False,
         )
 

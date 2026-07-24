@@ -3,9 +3,17 @@ name = "agent-gateway"
 description = "Add ChatGPT/Codex and Copilot subscription models to Claude Code while preserving native Claude login."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-license = { text = "Proprietary" }
+license = "Apache-2.0"
 authors = [{ name = "Julien Fresnel" }]
 keywords = ["claude-code", "litellm", "gateway", "codex", "copilot"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+]
 dynamic = ["version"]
 dependencies = [
     # Pinned, reviewed LiteLLM. Versions 1.82.7 and 1.82.8 are FORBIDDEN
@@ -20,6 +28,12 @@ dependencies = [
     "filelock>=3.13,<4.0",
     "psutil>=5.9,<8.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/JuLius5838/agw"
+Repository = "https://github.com/JuLius5838/agw"
+Issues = "https://github.com/JuLius5838/agw/issues"
+Changelog = "https://github.com/JuLius5838/agw/blob/main/CHANGELOG.md"
 
 [project.scripts]
 agw = "agent_gateway.cli:app"

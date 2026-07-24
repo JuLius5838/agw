@@ -1,25 +1,29 @@
-# Policy Decision Record
+# Provider Policy Decision Record
 
-> **Status:** DRAFT — requires named-owner sign-off before broad team rollout (Gate D).
-> This file records the decision; it must not contain vendor credentials or terms text.
+> **Status:** DRAFT — each user or adopting organization must review provider terms and
+> data-flow policy before enabling an external route. This file must not contain vendor
+> credentials or copied confidential terms.
+
+AGW is a personal open-source project. Publishing the source or plugin does not approve the
+use of any external subscription bridge for a particular person or organization.
 
 ## Decision required
 
-Approve (or decline) limited use of LiteLLM's **ChatGPT/Codex subscription** and **GitHub
-Copilot subscription** bridges to back Claude Code via the agent gateway.
+Approve (or decline) use of LiteLLM's **ChatGPT/Codex subscription** and **GitHub Copilot
+subscription** bridges to back Claude Code via Agent Gateway.
 
-Two separate decisions:
-1. **Internal experiment** — a small pilot on individual developer machines.
-2. **General team rollout** — broad distribution via the private marketplace.
+Decisions are provider-specific and deployment-specific:
 
-## Owners
+1. **Individual use** — the user confirms their account terms and intended data flow.
+2. **Organizational use** — the adopting organization names its own security, privacy, and
+   provider-policy owners before enabling routes for company repository content.
 
-| Role | Owner | Decision date |
-|------|-------|---------------|
-| Runtime / maintainer | _TBD_ | |
-| Security | _TBD_ | |
-| Data-flow / privacy | _TBD_ | |
-| Enterprise Copilot policy | _TBD_ | |
+## Project ownership
+
+| Role | Owner |
+|------|-------|
+| Project maintainer | [Julien Fresnel](https://github.com/JuLius5838) |
+| Adopter security/privacy/provider policy | The individual user or adopting organization |
 
 ## What reviewers must weigh
 
@@ -30,16 +34,21 @@ Two separate decisions:
   non-Claude models. This is a compatibility- and policy-gated use of third-party LiteLLM
   bridges, not a supported configuration.
 - **GitHub Copilot terms.** LiteLLM's Copilot adapter injects Copilot client headers.
-  Enterprise Copilot policy and vendor terms must be reviewed before rollout.
+  The applicable individual or organizational Copilot policy and vendor terms must be
+  reviewed before enabling that route.
 - **Supply chain.** LiteLLM is pinned in `uv.lock`; `1.82.7`/`1.82.8` are forbidden
   (compromised). Upgrades require a reviewed change.
 
-## Decision log
+## Adopter decision template
 
-| Date | Decision | Scope | Notes |
-|------|----------|-------|-------|
-| _TBD_ | _pending_ | experiment | |
-| _TBD_ | _pending_ | team rollout | |
+Copy this table into the adopting repository or organization's policy system; do not commit
+private vendor terms or internal approval evidence to AGW's public repository.
 
-If either provider is found non-compliant, that provider is disabled or the scope reduced —
-the decision is recorded here, never hidden behind the other provider.
+| Date | Provider | Decision | Scope | Owner | Notes/reference |
+|------|----------|----------|-------|-------|-----------------|
+| _TBD_ | ChatGPT/Codex | _pending_ | individual or organization | _TBD_ | |
+| _TBD_ | GitHub Copilot | _pending_ | individual or organization | _TBD_ | |
+
+If either provider is found non-compliant, disable that provider or reduce the approved
+scope. AGW's no-fallback rule prevents that decision from being hidden behind another
+provider.
