@@ -9,6 +9,7 @@ both match. Every stop/terminate path checks identity before signalling.
 from __future__ import annotations
 
 import socket
+import time
 from dataclasses import dataclass
 
 import psutil
@@ -81,6 +82,84 @@ def terminate(identity: ProcessIdentity, *, timeout: float = 5.0) -> bool:
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         pass
     return not is_alive(identity)
+
+
+def _gone(identity: ProcessIdentity) -> bool:
+    """True when nothing runnable matches ``identity``.
+
+    A zombie counts as gone: it has already exited and is only waiting to be
+    reaped by its parent, which the caller does right after terminating.
+    """
+    if not is_alive(identity):
+        return True
+    try:
+        return bool(psutil.Process(identity.pid).status() == psutil.STATUS_ZOMBIE)
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return True
+
+
+def terminate_process_group(
+    identity: ProcessIdentity,
+    *,
+    term_timeout: float = 5.0,
+    kill_timeout: float = 5.0,
+) -> bool:
+    """Terminate a session leader *and its descendants*, identity-checked.
+
+    ``terminate`` signals one process. A probe's Claude process spawns hook
+    children of its own, so signalling only the leader would orphan them. The
+    leader is started with ``start_new_session=True``, which makes it its own
+    process-group leader, and this sends SIGTERM then SIGKILL to that whole
+    group.
+
+    The identity is re-checked immediately before each signal. A PID whose
+    ``create_time`` no longer matches has been reused by an unrelated process,
+    and signalling its group could kill anything on the machine — so a mismatch
+    is reported as "already gone" instead.
+    """
+    import os
+    import signal
+
+    if _gone(identity):
+        return True
+
+    def _signal_group(number: int) -> bool:
+        if _gone(identity):
+            return True
+        try:
+            group = os.getpgid(identity.pid)
+        except (ProcessLookupError, PermissionError):
+            return False
+        if group != identity.pid:
+            # Not its own group leader: signalling `group` would reach processes
+            # this identity does not own.
+            return False
+        # Re-check *after* resolving the group and immediately before signalling.
+        if _gone(identity):
+            return True
+        try:
+            os.killpg(group, number)
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            return False
+        return True
+
+    def _wait(timeout: float) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if _gone(identity):
+                return True
+            time.sleep(0.05)
+        return _gone(identity)
+
+    if not _signal_group(signal.SIGTERM):
+        return _gone(identity)
+    if _wait(term_timeout):
+        return True
+    if not _signal_group(signal.SIGKILL):
+        return _gone(identity)
+    return _wait(kill_timeout)
 
 
 def is_port_open(host: str, port: int, *, timeout: float = 0.5) -> bool:

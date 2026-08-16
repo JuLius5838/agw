@@ -91,8 +91,8 @@ remains unchanged.
 Claude Code 2.1.218 only performs multi-model gateway discovery when a gateway credential
 replaces the saved Claude login. AGW does not make that tradeoff: it adds one exact external
 name (the configured default, or first active name) to the visual picker through Claude's
-supported custom-model option. Other active names remain selectable with `/model NAME`,
-`claude --model NAME`, and per-agent model assignment.
+supported custom-model option. Other active names remain selectable with `/model NAME`
+and `claude --model NAME`.
 
 ```text
 agw claude ...    # canonical: always uses the managed gateway
@@ -103,9 +103,28 @@ command claude    # always bypasses the gateway → native Claude Code
 Ask Claude in natural language to route work to a model:
 
 ```text
-Spawn a review subagent using gpt-5.6-sol for this change.
-Create two teammates: use gpt-5.6-sol for implementation and <other-model> for review.
+Use gpt-5.6-sol for this session.
+Review this change with several available models and synthesize the findings.
 ```
+
+### External models as subagents
+
+The built-in Agent tool validates its explicit `model` argument against a Claude-only
+list, so an external name can never be passed there. Instead, each external model that
+has been explicitly verified is offered to Claude as its own read-only agent type named
+`agw-<model>-<digest>`; Claude selects it by `subagent_type` alone and may run several
+concurrently, then synthesize the results.
+
+Verification makes real Claude and provider model calls, so it is never automatic:
+
+```bash
+agw models verify gpt-5.6-sol --claude-subagent
+```
+
+A model with no current evidence simply has no agent type — AGW never substitutes a
+different model. Run `agw doctor` to see why a model is missing. Generated agents get
+only `Read`, `Grep`, and `Glob`, and **any repository content they read is sent to that
+external provider**.
 
 ## Safety model (summary)
 

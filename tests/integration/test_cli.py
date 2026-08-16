@@ -305,3 +305,170 @@ def test_uninstall_credentials_non_tty_requires_yes(tmp_path) -> None:
     ok = _run_env("uninstall", "--credentials", "--yes", home=home)
     assert ok.returncode == 0
     assert not creds.exists()
+
+
+# --------------------------------------------------------------------------- #
+# `models verify --claude-subagent`
+# --------------------------------------------------------------------------- #
+def test_models_verify_help_documents_the_claude_subagent_flag() -> None:
+    # A wide terminal, so the assertion is about the help text and not about
+    # where Rich happens to wrap it at the default 80 columns.
+    result = subprocess.run(
+        [sys.executable, "-m", "agent_gateway", "models", "verify", "--help"],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "COLUMNS": "200"},
+    )
+    assert result.returncode == 0
+    assert "--claude-subagent" in result.stdout
+    # The user must be told this spends real model calls before they opt in.
+    assert (
+        "Run bounded native Claude and external-provider model calls to verify "
+        "generated subagent routing." in result.stdout
+    )
+
+
+def _models_verify(monkeypatch, tmp_path, *args, native=None, direct=None):
+    """Run `models verify` in-process with every side effect stubbed out.
+
+    Whichever verifier a test does *not* supply is replaced by a tripwire, so a
+    dispatch bug shows up as a failure rather than as silently doing nothing.
+    """
+    from typer.testing import CliRunner
+
+    from agent_gateway import cli as cli_mod
+    from agent_gateway import models as models_mod
+    from agent_gateway import proxy as proxy_mod
+    from agent_gateway import secret_store, subagent_probe
+    from agent_gateway.config import GatewayConfig
+    from agent_gateway.model_registry import load_registry_text
+    from agent_gateway.paths import get_paths
+    from agent_gateway.process import ProcessIdentity
+
+    paths = get_paths({"HOME": str(tmp_path)})
+    registry = load_registry_text(
+        """
+        default_model: null
+        models:
+          - name: gpt-5.6-luna
+            provider: chatgpt
+            upstream_model: chatgpt/gpt-5.6-luna
+            mode: responses
+            enabled: true
+          - name: gpt-5.6-sol
+            provider: chatgpt
+            upstream_model: chatgpt/gpt-5.6-sol
+            mode: responses
+            enabled: true
+        """
+    )
+    config = GatewayConfig(port=4000, native_claude_path="/usr/bin/claude")
+    dummy = ProcessIdentity(pid=1, create_time=1.0)
+    state = proxy_mod.ProxyState(
+        supervisor=dummy,
+        router=dummy,
+        litellm=None,
+        host="127.0.0.1",
+        port=4000,
+        litellm_host=None,
+        litellm_port=None,
+        litellm_version="1.93.0",
+        config_fingerprint="c" * 64,
+        runtime_fingerprint="a" * 64,
+        log_path=str(tmp_path / "proxy.log"),
+    )
+
+    def tripwire(label):
+        def _fail(*_args, **_kwargs):
+            raise AssertionError(f"{label} must not run for this invocation")
+
+        return _fail
+
+    monkeypatch.setattr(cli_mod, "_load_runtime", lambda: (paths, config, registry))
+    monkeypatch.setattr(proxy_mod, "ensure_running", lambda *a, **k: state)
+    monkeypatch.setattr(secret_store, "ensure_proxy_key", lambda _paths: "local-key")
+    monkeypatch.setattr(models_mod, "verify_model", direct or tripwire("the direct verifier"))
+    monkeypatch.setattr(
+        subagent_probe,
+        "verify_native_subagent",
+        native or tripwire("native verification"),
+    )
+    return CliRunner().invoke(cli_mod.app, ["models", "verify", *args])
+
+
+def _native(ok=True, detail="exact native subagent route verified", seen=None):
+    from agent_gateway.subagent_probe import NativeSubagentVerifyReport
+
+    def verify(paths, config, registry, state, key, entry, **kwargs):
+        if seen is not None:
+            seen.append(entry.name)
+        return NativeSubagentVerifyReport(
+            model=entry.name,
+            provider=entry.provider.value,
+            ok=ok(entry.name) if callable(ok) else ok,
+            detail=detail,
+        )
+
+    return verify
+
+
+def test_models_verify_without_the_flag_keeps_the_direct_path(monkeypatch, tmp_path) -> None:
+    from agent_gateway.models import Check, CheckStatus, VerifyReport
+
+    def direct(state, key, entry):
+        return VerifyReport(
+            model=entry.name,
+            provider=entry.provider.value,
+            ok=True,
+            checks=[Check("messages", CheckStatus.passed, "system + non-streaming reply ok")],
+        )
+
+    result = _models_verify(monkeypatch, tmp_path, "gpt-5.6-sol", direct=direct)
+
+    assert result.exit_code == 0
+    assert "gpt-5.6-sol" in result.output
+    assert "messages: system + non-streaming reply ok" in result.output
+    # The existing path says nothing about native subagents.
+    assert "native subagent" not in result.output
+
+
+def test_models_verify_with_the_flag_dispatches_to_native_verification(
+    monkeypatch, tmp_path
+) -> None:
+    seen: list[str] = []
+    result = _models_verify(
+        monkeypatch, tmp_path, "gpt-5.6-sol", "--claude-subagent", native=_native(seen=seen)
+    )
+
+    assert result.exit_code == 0
+    assert seen == ["gpt-5.6-sol"]
+    assert "exact native subagent route verified" in result.output
+    assert "bounded Claude and external-provider model calls" in result.output
+
+
+def test_models_verify_with_the_flag_and_no_model_covers_every_active_model(
+    monkeypatch, tmp_path
+) -> None:
+    seen: list[str] = []
+    result = _models_verify(monkeypatch, tmp_path, "--claude-subagent", native=_native(seen=seen))
+
+    assert result.exit_code == 0
+    assert seen == ["gpt-5.6-luna", "gpt-5.6-sol"]  # sorted registry order
+
+
+def test_models_verify_attempts_every_model_before_failing(monkeypatch, tmp_path) -> None:
+    seen: list[str] = []
+    result = _models_verify(
+        monkeypatch,
+        tmp_path,
+        "--claude-subagent",
+        native=_native(
+            ok=lambda name: name != "gpt-5.6-luna",
+            detail="external subagent evidence is stale",
+            seen=seen,
+        ),
+    )
+
+    # A failing model must not short-circuit the others.
+    assert seen == ["gpt-5.6-luna", "gpt-5.6-sol"]
+    assert result.exit_code == ExitCode.MODEL_UNAVAILABLE

@@ -14,8 +14,15 @@ from pathlib import Path
 from typing import NoReturn
 
 from agent_gateway import proxy
-from agent_gateway.config import GatewayConfig, validate_native_claude_path
+from agent_gateway.claude_compat import resolve_claude_identity
+from agent_gateway.config import GatewayConfig, read_claude_settings, validate_native_claude_path
 from agent_gateway.errors import PrerequisiteError
+from agent_gateway.external_subagents import (
+    GeneratedAgent,
+    current_generated_agents,
+    has_any_compatibility_evidence,
+    merge_agents_args,
+)
 from agent_gateway.harnesses.base import Harness
 from agent_gateway.model_registry import ModelRegistry
 from agent_gateway.paths import Paths
@@ -169,8 +176,26 @@ class ClaudeHarness(Harness):
     ) -> NoReturn:
         executable = self.resolve_executable(config)
         proxy_key = ensure_proxy_key(paths)
-        proxy.ensure_running(paths, config, registry)
+        # Order matters: the proxy must come up first, because its global
+        # provider-authentication check is what fails a launch fast. Only then is
+        # it meaningful to ask which external agents may be advertised.
+        state = proxy.ensure_running(paths, config, registry)
+        generated: tuple[GeneratedAgent, ...] = ()
+        # Identifying the Claude build costs a `claude --version` subprocess and
+        # a full SHA-256 of the binary. Skip both when nothing has ever been
+        # verified: no evidence means no eligible agent either way.
+        if has_any_compatibility_evidence(paths):
+            generated = current_generated_agents(
+                paths,
+                registry,
+                resolve_claude_identity(config),
+                state.runtime_fingerprint,
+                read_claude_settings(),
+            )
         launch_args = _launch_args(config, forwarded_args)
+        # With no eligible model this returns the forwarded arguments untouched,
+        # so an ordinary session is byte-for-byte what the user typed.
+        launch_args = merge_agents_args(launch_args, generated)
         env = self.build_env(os.environ, config, registry, proxy_key, launch_args)
         argv = [str(executable), *launch_args]
         # Replaces this process: stdio, signals, and exit status pass through, and

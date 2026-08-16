@@ -228,20 +228,47 @@ def models_verify(
         str | None,
         typer.Argument(help="Model to verify; defaults to every active model."),
     ] = None,
+    claude_subagent: Annotated[
+        bool,
+        typer.Option(
+            "--claude-subagent/--no-claude-subagent",
+            help=(
+                "Run bounded native Claude and external-provider model calls to verify "
+                "generated subagent routing."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Verify a model's Claude Code compatibility through the Anthropic endpoint."""
-    from agent_gateway import proxy
+    from agent_gateway import proxy, secret_store, subagent_probe
     from agent_gateway.errors import ModelUnavailableError
     from agent_gateway.models import CheckStatus, resolve_models_to_verify, verify_model
-    from agent_gateway.secret_store import ensure_proxy_key
 
     paths, config, registry = _load_runtime()
     entries = resolve_models_to_verify(registry, model)
     state = proxy.ensure_running(paths, config, registry)
-    key = ensure_proxy_key(paths)
+    key = secret_store.ensure_proxy_key(paths)
+
+    if claude_subagent:
+        # Disclosed before the first call: this mode starts a real Claude process
+        # and its subagent reaches the configured external provider.
+        typer.echo(
+            "Native subagent verification runs bounded Claude and external-provider model calls."
+        )
 
     any_failed = False
     for entry in entries:
+        if claude_subagent:
+            native = subagent_probe.verify_native_subagent(
+                paths, config, registry, state, key, entry
+            )
+            marker = "✓" if native.ok else "✗"
+            color = typer.colors.GREEN if native.ok else typer.colors.RED
+            typer.secho(f"{marker} {native.model} ({native.provider})", fg=color)
+            typer.echo(f"    {marker} native subagent: {native.detail}")
+            any_failed = any_failed or not native.ok
+            continue
+
         report = verify_model(state, key, entry)
         marker = "✓" if report.ok else "✗"
         color = typer.colors.GREEN if report.ok else typer.colors.RED
@@ -252,7 +279,11 @@ def models_verify(
         any_failed = any_failed or not report.ok
 
     if any_failed:
-        raise ModelUnavailableError("one or more models failed Claude-compatibility verification.")
+        raise ModelUnavailableError(
+            "one or more models failed native Claude subagent verification."
+            if claude_subagent
+            else "one or more models failed Claude-compatibility verification."
+        )
 
 
 @models_app.command("add")

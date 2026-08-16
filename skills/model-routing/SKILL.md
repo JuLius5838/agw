@@ -1,12 +1,11 @@
 ---
 name: model-routing
 description: >-
-  Select which gateway model runs a task, subagent, or agent-team teammate. Use
-  when the user names a model for a piece of work — e.g. "use gpt-5.6-sol for
-  this", "spawn a review subagent on <model>", "have one teammate use <model-a>
-  and another use <model-b>", or "switch this session to <model>". Ensures the
-  exact configured model name is passed through unchanged, with no invented
-  aliases and no silent substitution.
+  Select which gateway model runs a task or subagent. Use when the user names a
+  model for a piece of work — e.g. "use gpt-5.6-sol for this", "spawn a review
+  subagent on <model>", "get a second opinion from another model", or "switch
+  this session to <model>". Ensures the exact configured model name is passed
+  through unchanged, with no invented aliases and no silent substitution.
 ---
 
 # Agent Gateway — model routing
@@ -29,30 +28,51 @@ name the gateway exposes. Never invent role aliases (no `team-review`,
 
 2. **Apply the name where the work runs:**
    - **Main session:** `claude --model <name>`, or `/model <name>` inside a
-     running session. Claude Code 2.1.218 shows one exact AGW custom-model entry
-     in its picker; use direct exact selection for the other active names.
-   - **Subagent:** pass `<name>` unchanged as that subagent's model.
-   - **Agent-team teammate:** spawn each teammate with its requested `<name>`.
+     running session. Claude Code shows one exact AGW custom-model entry in its
+     picker; use direct exact selection for the other active names.
+   - **Subagent:** select the generated agent type whose definition carries that
+     model, and pass **only** `subagent_type`. Generated types are named
+     `agw-<sanitized-model>-<digest>`, e.g. `agw-gpt-5-6-sol-66127d2195a1`.
 
-3. **Teammate models are fixed at spawn.** Changing the lead's `/model` does not
-   change teammates that are already running; spawn a replacement to change one.
+3. **Never put an external name in the Agent tool's `model` field.** That
+   argument is validated against `sonnet|opus|haiku|fable` and an external name
+   is rejected by the client before the gateway ever sees it. The external model
+   comes from the generated agent's own definition; the invocation must omit the
+   override entirely.
 
-4. **Verify routing after spawn.** Correlate each spawned agent's id with the
-   public name/provider actually used (via `agw status` / sanitized proxy
-   evidence). If Claude's managed `availableModels` allowlist substituted a
-   different model before the request reached the gateway, report that mismatch —
-   do **not** present the fallback run as the requested-model run.
+4. **A missing generated type is a status to report, not a fallback.** If no
+   `agw-…` type exists for the requested model, the model is inactive,
+   policy-excluded, unverified, failed, stale, or colliding with a user-defined
+   agent id. Say which by running `agw doctor`, and offer:
 
-5. **Surface errors, don't paper over them.** If a model is unauthorized,
+   ```bash
+   agw models verify <name> --claude-subagent
+   ```
+
+   That command makes real Claude and provider model calls, so ask before
+   running it. Never route the work to a different model instead.
+
+5. **Multiple models are fine when they add value.** Several generated types can
+   run concurrently in one turn; compare their results and say plainly where they
+   disagree. Do not fan out to spend quota or duplicate identical work.
+
+6. **Generated agents are analysis-only.** They hold exactly `Read`, `Grep`, and
+   `Glob` — no shell, editing, recursion, web, or MCP. Give one a task it can
+   actually do with those tools, and remember that any repository content it
+   reads is sent to that external provider.
+
+7. **Surface errors, don't paper over them.** If a model is unauthorized,
    unavailable, removed upstream, or tool-incompatible, report the failure under
    its exact public name and provider. The gateway never falls back to another
-   model.
+   model. If Claude warns about a model restriction or substitution, report that
+   mismatch rather than presenting the fallback run as the requested-model run.
 
 ## Example requests this handles
 
 ```text
-Spawn a review subagent using gpt-5.6-sol for this change.
+Use gpt-5.6-sol for this session.
 
-Create two teammates: use gpt-5.6-sol for implementation and <other-model>
-for review. Wait for both and summarize their results.
+Review this change with several available models and synthesize the findings.
+
+Get an independent read on this design from gpt-5.6-sol.
 ```

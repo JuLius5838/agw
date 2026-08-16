@@ -18,6 +18,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from agent_gateway import proxy
+from agent_gateway.claude_compat import resolve_claude_identity
 from agent_gateway.config import GatewayConfig, load_config, read_claude_settings
 from agent_gateway.errors import GatewayError
 from agent_gateway.model_registry import ModelRegistry, load_registry
@@ -89,7 +90,9 @@ def _native_claude(config: GatewayConfig) -> Check:
 def _conflicting_env(env: Mapping[str, str]) -> list[Check]:
     checks: list[Check] = []
     conflicts = {
-        "CLAUDE_CODE_SUBAGENT_MODEL": "overrides per-invocation subagent model",
+        "CLAUDE_CODE_SUBAGENT_MODEL": (
+            "overrides definition-level and per-invocation subagent models"
+        ),
         "CLAUDE_CODE_USE_BEDROCK": "cloud routing flag overrides gateway auth",
         "CLAUDE_CODE_USE_VERTEX": "cloud routing flag overrides gateway auth",
         "CLAUDE_CODE_USE_FOUNDRY": "cloud routing flag overrides gateway auth",
@@ -165,6 +168,66 @@ def _providers(paths: Paths, registry: ModelRegistry, *, online: bool) -> list[C
     return checks
 
 
+def _external_subagents(
+    paths: Paths,
+    config: GatewayConfig,
+    registry: ModelRegistry,
+    env: Mapping[str, str],
+) -> list[Check]:
+    """Explain, per active model, why a generated agent is or is not advertised.
+
+    Purely local: stored records, inspectable settings, executable metadata, and
+    a bounded ``claude --version``. It never verifies, registers a route, or
+    mutates evidence — running a probe is always an explicit user action.
+    """
+    from agent_gateway.external_subagents import (
+        inspect_generated_id_collisions,
+        resolve_external_agent_eligibility,
+    )
+
+    if not registry.active_models():
+        return []
+
+    # The fingerprint is derived from the rendered LiteLLM config, which does not
+    # exist until the proxy has started once. Without it every model would look
+    # stale, which would be a lie rather than a diagnosis.
+    try:
+        fingerprint = proxy.runtime_fingerprint(paths.generated_litellm_config.read_text())
+    except OSError:
+        return [
+            Check(
+                Level.warn,
+                "external subagent",
+                "external subagent status unavailable until the proxy has been started once",
+            )
+        ]
+
+    try:
+        claude = resolve_claude_identity(config)
+    except GatewayError as exc:
+        return [Check(Level.warn, "external subagent", exc.message)]
+
+    settings = read_claude_settings(dict(env))
+    rows = resolve_external_agent_eligibility(paths, registry, claude, fingerprint, settings)
+
+    checks = [
+        Check(
+            Level.ok if row.agent is not None else Level.warn,
+            f"external subagent {row.status.model}",
+            row.status.detail if row.agent is None else "current",
+        )
+        for row in rows
+    ]
+    collisions = inspect_generated_id_collisions(
+        settings, [row.agent for row in rows if row.agent is not None]
+    )
+    checks.extend(
+        Check(Level.fail, "external subagent id collision", f"{path} defines {agent_id}")
+        for path, agent_id in collisions
+    )
+    return checks
+
+
 def _proxy_probe(paths: Paths) -> list[Check]:
     result = proxy.status(paths)
     if result.state is None:
@@ -219,6 +282,7 @@ def run_doctor(
         )
         checks += _providers(paths, registry, online=online)
         checks += _model_allowlist(registry, environ)
+        checks += _external_subagents(paths, config, registry, environ)
     except GatewayError as exc:
         checks.append(Check(Level.fail, "models", exc.message))
         return DoctorReport(checks)

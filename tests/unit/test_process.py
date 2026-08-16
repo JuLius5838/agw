@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import socket
 import subprocess
 import sys
 import time
+
+import pytest
 
 from agent_gateway.process import (
     ProcessIdentity,
@@ -15,11 +18,22 @@ from agent_gateway.process import (
     is_alive,
     is_port_open,
     terminate,
+    terminate_process_group,
 )
+
+posix_only = pytest.mark.skipif(os.name != "posix", reason="POSIX process groups")
 
 
 def _spawn_sleeper(seconds: float = 60) -> subprocess.Popen[bytes]:
     return subprocess.Popen([sys.executable, "-c", f"import time; time.sleep({seconds})"])
+
+
+def _spawn_group_leader(seconds: float = 60) -> subprocess.Popen[bytes]:
+    """A sleeper that leads its own session, like the probe's Claude process."""
+    return subprocess.Popen(
+        [sys.executable, "-c", f"import time; time.sleep({seconds})"],
+        start_new_session=True,
+    )
 
 
 def test_identity_roundtrips_through_dict():
@@ -67,6 +81,73 @@ def test_terminate_stale_identity_does_not_kill_reused_pid():
     finally:
         proc.terminate()
         proc.wait()
+
+
+@posix_only
+def test_process_group_termination_kills_the_whole_group():
+    proc = _spawn_group_leader()
+    identity = identity_of(proc.pid)
+    assert identity is not None
+    assert os.getpgid(proc.pid) == proc.pid  # it really leads its own group
+
+    assert terminate_process_group(identity) is True
+    proc.wait()  # reap, so the exited process is not merely a zombie
+    assert is_alive(identity) is False
+
+
+@posix_only
+def test_process_group_termination_kills_a_child_in_the_group():
+    # The real risk: Claude spawns hook processes, and a bare terminate() would
+    # leave them orphaned. Signalling the group reaches them too.
+    leader = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import subprocess, sys, time; "
+            "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)']); "
+            "print(child.pid, flush=True); time.sleep(60)",
+        ],
+        start_new_session=True,
+        stdout=subprocess.PIPE,
+    )
+    try:
+        assert leader.stdout is not None
+        child_pid = int(leader.stdout.readline().decode().strip())
+        identity = identity_of(leader.pid)
+        assert identity is not None
+
+        assert terminate_process_group(identity) is True
+
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline and identity_of(child_pid) is not None:
+            time.sleep(0.05)
+        assert identity_of(child_pid) is None
+    finally:
+        if leader.poll() is None:  # pragma: no cover - cleanup safety net
+            leader.kill()
+        leader.wait()
+
+
+@posix_only
+def test_process_group_termination_never_signals_a_reused_pid():
+    proc = _spawn_group_leader(seconds=3)
+    try:
+        stale = ProcessIdentity(pid=proc.pid, create_time=1.0)
+        assert terminate_process_group(stale) is True
+        assert proc.poll() is None  # the real process is untouched
+    finally:
+        proc.terminate()
+        proc.wait()
+
+
+@posix_only
+def test_process_group_termination_of_a_dead_process_succeeds():
+    proc = _spawn_group_leader(seconds=0.1)
+    identity = identity_of(proc.pid)
+    assert identity is not None
+    proc.wait()
+    time.sleep(0.1)
+    assert terminate_process_group(identity) is True
 
 
 def test_port_open_true_then_false():

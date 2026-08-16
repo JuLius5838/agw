@@ -119,8 +119,24 @@ def test_model_routing_skill_forbids_aliases_and_fallback() -> None:
     assert "agw models list --json" in text  # obtains exact names
     assert "verbatim" in text or "unchanged" in text  # passes name through
     assert "never invent" in text or "no invented" in text
-    assert "spawn" in text and "fixed at spawn" in text
     assert "substitut" in text  # addresses allowlist substitution
+
+
+def test_model_routing_skill_routes_subagents_by_type_not_model() -> None:
+    text = (SKILLS_DIR / "model-routing" / "SKILL.md").read_text().lower()
+    # The Agent tool's `model` argument is Claude-only, so the skill must send
+    # Claude to the generated type and must not resurrect the old advice.
+    assert "subagent_type" in text
+    assert "agw-" in text
+    assert "sonnet|opus|haiku|fable" in text
+    assert "pass <name> unchanged as that subagent's model" not in text
+    assert "assign <name> per teammate" not in text
+    # A missing type is a status to report, never a quiet reroute.
+    assert "agw models verify" in text and "--claude-subagent" in text
+    # Analysis-only contract stated (wrapping-insensitive).
+    collapsed = " ".join(text.split())
+    assert "`read`, `grep`, and `glob`" in collapsed
+    assert "analysis-only" in collapsed
 
 
 def test_bootstrap_is_executable_and_ownership_aware() -> None:

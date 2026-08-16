@@ -79,8 +79,9 @@ the gateway never falls back to a different model.
    agw proxy restart
    ```
 
-   Then select it with `/model gpt-5.6-luna`, `claude --model gpt-5.6-luna`, or
-   per-agent routing (see the `model-routing` skill).
+   Then select it with `/model gpt-5.6-luna` or `claude --model gpt-5.6-luna`. To use it
+   as a subagent it must additionally pass `agw models verify gpt-5.6-luna
+   --claude-subagent`, which makes real model calls (see the `model-routing` skill).
 
 ## Remove a model
 

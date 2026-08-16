@@ -31,7 +31,8 @@ Claude Code 2.1.218 does not run gateway discovery without an
 the saved Claude subscription, so AGW intentionally leaves them unset. Instead, the
 launcher places one exact external name—the configured external default, or otherwise the
 first active name—in the visual picker using `ANTHROPIC_CUSTOM_MODEL_OPTION`. Every active
-external name remains valid with direct `/model NAME`, `--model NAME`, or per-agent routing.
+external name remains valid with direct `/model NAME` or `--model NAME`, and a verified
+name is additionally available as a generated subagent type (see "Selecting a model").
 
 ## The registry (`~/.config/agent-gateway/models.yaml`)
 
@@ -122,8 +123,45 @@ To rename the picker entry, edit only `display_name` in
 | Main session (start) | `claude --model gpt-5.6-sol` |
 | Main session (switch) | `/model gpt-5.6-sol` inside Claude; one external name also appears in the picker |
 | Default (no flag) | `claude` preserves Claude Code's native default when `default_model` is `null` |
-| Subagent | ask Claude to use `<name>` as the subagent model |
-| Agent-team teammate | assign `<name>` per teammate; fixed at spawn |
+| Subagent | select the generated `agw-…` type by `subagent_type`; never pass `<name>` to the Agent tool's `model` field |
+| Agent-team teammate | not supported; AGW makes no agent-team claim in v1 |
+
+### External models as subagents
+
+The Agent tool's explicit `model` argument only accepts `sonnet`, `opus`, `haiku`, and
+`fable`; an external name there is rejected by the client before AGW sees it. A Claude Code
+*custom-agent definition*, however, carries its own `model` field, so AGW generates one
+definition per verified external model and injects them at launch with `--agents`:
+
+```text
+gpt-5.6-sol -> agw-gpt-5-6-sol-66127d2195a1
+```
+
+Claude selects the type and omits the model override. It may run several external types
+concurrently and synthesize their results.
+
+Because Anthropic does not support routing Claude Code to non-Claude models through a
+gateway, and Claude Code may silently replace a definition-level model it rejects, a type
+is advertised only from a successful, current probe:
+
+```bash
+agw models verify gpt-5.6-sol --claude-subagent
+```
+
+That command makes bounded real Claude and external-provider calls, so it never runs
+automatically from setup, `doctor`, or launch. Evidence is bound to the exact Claude
+executable, version, model, provider, and AGW routing fingerprint; upgrading Claude or
+changing routing makes it stale and the type disappears until re-verified. A missing type
+always means inactive, policy-excluded, unverified, failed, stale, or colliding — never a
+silent fallback to another model. `agw doctor` reports which.
+
+Generated agents are analysis-only: exactly `Read`, `Grep`, and `Glob`, with no shell,
+editing, recursion, web, or MCP access. Any repository content such an agent reads is sent
+to that external provider as model input.
+
+AGW does not claim per-spawn enforcement in ordinary sessions: the gate proves the behavior
+for a specific Claude build under a controlled probe, and a later Claude regression is
+surfaced by re-verifying, not caught retroactively on an unobserved spawn.
 
 ## Reasoning effort
 

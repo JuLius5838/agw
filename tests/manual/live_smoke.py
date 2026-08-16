@@ -99,3 +99,104 @@ def test_verify_default_model_full_contract(running_proxy) -> None:
     report = verify_model(state, key, default)
     failed = [c.name for c in report.checks if c.status.value == "failed"]
     assert report.ok, f"failed checks: {failed}"
+
+
+# --------------------------------------------------------------------------- #
+# External subagents (Gate C) — live only, never part of the default suite
+# --------------------------------------------------------------------------- #
+def _external_models(paths: Paths, registry: ModelRegistry) -> list[str]:
+    authed = _authed_providers(paths, registry)
+    return [entry.name for entry in registry.active_models() if entry.provider in authed]
+
+
+def test_native_subagent_verification_records_current_evidence(running_proxy) -> None:
+    """Two models must pass the real probe and store evidence bound to this build."""
+    from agent_gateway.claude_compat import (
+        CompatibilityIdentity,
+        CompatibilityState,
+        compatibility_status,
+        resolve_claude_identity,
+    )
+    from agent_gateway.config import read_claude_settings
+    from agent_gateway.external_subagents import DEFINITION_CONTRACT_VERSION
+    from agent_gateway.secret_store import ensure_proxy_key
+    from agent_gateway.subagent_probe import verify_native_subagent
+
+    paths, config, registry, state = running_proxy
+    models = _external_models(paths, registry)
+    if len(models) < 2:
+        pytest.skip("enable and authenticate at least two external models first")
+
+    key = ensure_proxy_key(paths)
+    claude = resolve_claude_identity(config)
+    for name in models[:2]:
+        entry = registry.get_active(name)
+        report = verify_native_subagent(paths, config, registry, state, key, entry)
+        assert report.ok, f"{name}: {report.detail}"
+
+        identity = CompatibilityIdentity(
+            model=entry.name,
+            provider=entry.provider,
+            claude=claude,
+            runtime_fingerprint=state.runtime_fingerprint,
+            definition_contract=DEFINITION_CONTRACT_VERSION,
+        )
+        status = compatibility_status(paths, identity, settings=read_claude_settings())
+        assert status.state is CompatibilityState.current
+        record = status.record
+        assert record is not None
+        assert record.identity.claude.version == claude.version
+        assert record.identity.claude.sha256 == claude.sha256
+
+
+def test_verified_models_are_advertised_as_generated_types(running_proxy) -> None:
+    """A managed launch must inject exactly the current models, and nothing else."""
+    from agent_gateway.claude_compat import resolve_claude_identity
+    from agent_gateway.config import read_claude_settings
+    from agent_gateway.external_subagents import current_generated_agents
+
+    paths, config, registry, state = running_proxy
+    agents = current_generated_agents(
+        paths,
+        registry,
+        resolve_claude_identity(config),
+        state.runtime_fingerprint,
+        read_claude_settings(),
+    )
+    if len(agents) < 2:
+        pytest.skip("run the verification test first")
+
+    for agent in agents:
+        assert agent.agent_type.startswith("agw-")
+        assert agent.definition["model"] == agent.model
+        assert agent.definition["tools"] == ["Read", "Grep", "Glob"]
+
+
+def test_probe_state_is_removed_and_evidence_holds_no_content(running_proxy) -> None:
+    """After verification, no probe artifact remains and no canary was persisted."""
+    paths, _config, _registry, _state = running_proxy
+    if paths.probe_dir.exists():
+        assert list(paths.probe_dir.iterdir()) == []
+
+    for record in paths.compatibility_dir.glob("*/*.json"):
+        text = record.read_text(encoding="utf-8").lower()
+        for forbidden in ("prompt", "authorization", "bearer", "sk-", "token", "fixture"):
+            assert forbidden not in text
+    if paths.proxy_log.exists():
+        log = paths.proxy_log.read_text(encoding="utf-8").lower()
+        assert "agw-probe-" not in log  # the fixture canary never reaches the log
+
+
+@pytest.mark.skip(
+    reason=(
+        "Operator-driven: run a managed `claude` session, ask for a multi-model review, "
+        "and record the checklist in tests/manual/README.md."
+    )
+)
+def test_parent_runs_two_external_types_concurrently_and_synthesizes() -> None:
+    """Concurrency, synthesis, cancellation, and provider failure are observed by hand.
+
+    These need a real interactive parent session, so they are a documented operator
+    checklist rather than an automated assertion. See the Gate C list in
+    tests/manual/README.md.
+    """

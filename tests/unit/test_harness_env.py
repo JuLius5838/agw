@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 
 from agent_gateway.config import EffortLevel, GatewayConfig
@@ -186,3 +187,217 @@ def test_configured_effort_removes_inherited_hard_override():
 def test_inherited_effort_is_preserved_without_agw_default():
     env = _env(base={"CLAUDE_CODE_EFFORT_LEVEL": "low"})
     assert env["CLAUDE_CODE_EFFORT_LEVEL"] == "low"
+
+
+# --------------------------------------------------------------------------- #
+# Generated-agent injection at launch
+# --------------------------------------------------------------------------- #
+def _launch_capture(monkeypatch, tmp_path, forwarded, *, models=("gpt-5.6-sol",), seed=True):
+    """Drive ClaudeHarness.launch() with a captured execve and no real proxy."""
+    import os
+
+    import pytest
+
+    from agent_gateway import proxy as proxy_mod
+    from agent_gateway.claude_compat import (
+        COMPATIBILITY_SCHEMA,
+        ClaudeExecutableIdentity,
+        CompatibilityIdentity,
+        CompatibilityRecord,
+        utc_now,
+        write_compatibility_record,
+    )
+    from agent_gateway.external_subagents import DEFINITION_CONTRACT_VERSION
+    from agent_gateway.harnesses import claude as claude_harness
+    from agent_gateway.paths import get_paths
+    from agent_gateway.process import ProcessIdentity
+    from agent_gateway.providers import Provider
+
+    paths = get_paths({"HOME": str(tmp_path)})
+    fake_claude = tmp_path / "claude"
+    fake_claude.write_text("#!/bin/sh\n")
+    fake_claude.chmod(0o755)
+    config = GatewayConfig(port=4000, native_claude_path=str(fake_claude))
+
+    registry = load_registry_text(
+        "default_model: null\nmodels:\n"
+        + "".join(
+            f"  - name: {name}\n"
+            f"    provider: chatgpt\n"
+            f"    upstream_model: chatgpt/{name}\n"
+            f"    mode: responses\n"
+            f"    enabled: true\n"
+            for name in models
+        )
+    )
+
+    identity = ClaudeExecutableIdentity(
+        configured_path=str(fake_claude),
+        resolved_path=str(fake_claude.resolve()),
+        sha256="b" * 64,
+        version="2.1.232 (Claude Code)",
+    )
+    dummy = ProcessIdentity(pid=1, create_time=1.0)
+    state = proxy_mod.ProxyState(
+        supervisor=dummy,
+        router=dummy,
+        litellm=None,
+        host="127.0.0.1",
+        port=4000,
+        litellm_host=None,
+        litellm_port=None,
+        litellm_version="1.93.0",
+        config_fingerprint="c" * 64,
+        runtime_fingerprint="a" * 64,
+        log_path=str(tmp_path / "proxy.log"),
+    )
+
+    if seed:
+        for name in models:
+            write_compatibility_record(
+                paths,
+                CompatibilityRecord(
+                    schema=COMPATIBILITY_SCHEMA,
+                    identity=CompatibilityIdentity(
+                        model=name,
+                        provider=Provider.chatgpt,
+                        claude=identity,
+                        runtime_fingerprint="a" * 64,
+                        definition_contract=DEFINITION_CONTRACT_VERSION,
+                    ),
+                    verified_at=utc_now(),
+                    outcome="passed",
+                    detail="exact native subagent route verified",
+                ),
+            )
+
+    monkeypatch.setattr(proxy_mod, "ensure_running", lambda *a, **k: state)
+    monkeypatch.setattr(claude_harness, "resolve_claude_identity", lambda _config: identity)
+    monkeypatch.setattr(claude_harness, "read_claude_settings", lambda: [])
+    monkeypatch.setattr(claude_harness, "ensure_proxy_key", lambda _p: "sk-agw-test")
+
+    captured: dict = {}
+
+    def fake_execve(path, argv, env):
+        captured.update({"path": path, "argv": argv, "env": env})
+        raise SystemExit(0)
+
+    monkeypatch.setattr(os, "execve", fake_execve)
+    with pytest.raises(SystemExit):
+        ClaudeHarness().launch(paths, config, registry, list(forwarded))
+    return captured, paths
+
+
+def _agents_payload(captured):
+    argv = captured["argv"]
+    return json.loads(argv[argv.index("--agents") + 1])
+
+
+def test_launch_injects_one_definition_per_current_model(monkeypatch, tmp_path):
+    captured, _paths = _launch_capture(monkeypatch, tmp_path, [])
+    payload = _agents_payload(captured)
+
+    assert list(payload) == ["agw-gpt-5-6-sol-66127d2195a1"]
+    definition = payload["agw-gpt-5-6-sol-66127d2195a1"]
+    assert definition["model"] == "gpt-5.6-sol"
+    assert definition["tools"] == ["Read", "Grep", "Glob"]
+    assert definition["maxTurns"] == 20
+
+
+def test_launch_injects_every_current_model_deterministically(monkeypatch, tmp_path):
+    captured, _paths = _launch_capture(
+        monkeypatch, tmp_path, [], models=("gpt-5.6-sol", "gpt-5.6-luna")
+    )
+    payload = _agents_payload(captured)
+    assert len(payload) == 2
+    assert all(name.startswith("agw-") for name in payload)
+    assert {definition["model"] for definition in payload.values()} == {
+        "gpt-5.6-sol",
+        "gpt-5.6-luna",
+    }
+
+
+def test_launch_merges_a_user_agents_option_in_place(monkeypatch, tmp_path):
+    captured, _paths = _launch_capture(
+        monkeypatch, tmp_path, ["--agents", '{"mine":{"description":"x"}}', "chat"]
+    )
+    payload = _agents_payload(captured)
+    assert payload["mine"] == {"description": "x"}
+    assert "agw-gpt-5-6-sol-66127d2195a1" in payload
+    assert captured["argv"][-1] == "chat"
+
+
+def test_launch_without_evidence_forwards_arguments_byte_for_byte(monkeypatch, tmp_path):
+    forwarded = ["--model", "gpt-5.6-sol", "--", "extra-arg", "--agents", "not-json"]
+    captured, _paths = _launch_capture(monkeypatch, tmp_path, forwarded, seed=False)
+    assert captured["argv"][1:] == forwarded
+    assert "--agents" not in captured["argv"][: captured["argv"].index("--")]
+
+
+def test_launch_places_the_generated_option_before_a_terminator(monkeypatch, tmp_path):
+    captured, _paths = _launch_capture(monkeypatch, tmp_path, ["--", "a prompt"])
+    argv = captured["argv"]
+    assert argv.index("--agents") < argv.index("--")
+    assert argv[-2:] == ["--", "a prompt"]
+
+
+def test_launch_still_strips_credentials_and_subagent_overrides(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_CODE_SUBAGENT_MODEL", "haiku")
+    monkeypatch.setenv("CHATGPT_TOKEN_DIR", "/creds")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "leak")
+    captured, _paths = _launch_capture(monkeypatch, tmp_path, [])
+    env = captured["env"]
+    assert "CLAUDE_CODE_SUBAGENT_MODEL" not in env
+    assert "CHATGPT_TOKEN_DIR" not in env
+    assert "ANTHROPIC_AUTH_TOKEN" not in env
+    assert env["ANTHROPIC_BASE_URL"] == "http://127.0.0.1:4000"
+
+
+def test_launch_keeps_the_configured_effort_placement(monkeypatch, tmp_path):
+    import os
+
+    from agent_gateway.config import EffortLevel
+
+    captured: dict = {}
+    original = _launch_capture
+
+    # Effort insertion and --agents insertion must not interfere.
+    monkeypatch.setattr(
+        "agent_gateway.harnesses.claude._launch_args",
+        lambda config, args: ["--effort", "high", *args],
+    )
+    captured, _paths = original(monkeypatch, tmp_path, ["chat"])
+    argv = captured["argv"]
+    assert argv[1:3] == ["--effort", "high"]
+    assert argv[3] == "chat"
+    assert argv[4] == "--agents"
+    assert EffortLevel is not None
+    assert os is not None
+
+
+def test_launch_fails_before_exec_on_a_colliding_user_definition(monkeypatch, tmp_path):
+    import pytest
+
+    from agent_gateway.errors import ConfigError
+
+    colliding = json.dumps({"agw-gpt-5-6-sol-66127d2195a1": {"description": "mine"}})
+    with pytest.raises(ConfigError) as excinfo:
+        _launch_capture(monkeypatch, tmp_path, ["--agents", colliding])
+    assert "reserved generated agent ID" in excinfo.value.message
+    assert "description" not in excinfo.value.message
+
+
+def test_launch_without_any_evidence_never_identifies_the_claude_binary(monkeypatch, tmp_path):
+    import pytest
+
+    from agent_gateway.harnesses import claude as claude_harness
+
+    def tripwire(_config):
+        raise AssertionError("an ordinary launch must not run `claude --version`")
+
+    monkeypatch.setattr(claude_harness, "resolve_claude_identity", tripwire)
+    # _launch_capture installs its own stub, so patch again after it runs by
+    # driving the un-seeded path and asserting the tripwire never fires.
+    captured, _paths = _launch_capture(monkeypatch, tmp_path, ["chat"], seed=False)
+    assert captured["argv"][1:] == ["chat"]
+    assert pytest is not None

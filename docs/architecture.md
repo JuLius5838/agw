@@ -47,6 +47,10 @@
 | `usage.py` | Unified usage model/renderer; Claude snapshot capture and isolated Codex App Server account RPC client. |
 | `claude_integration.py` | Inert `/agw-usage` registration, personal companion-plugin installation, and non-destructive Claude status-line collector setup. |
 | `claude_extension.py` | Local MCP server for the zero-model-call native usage dialog and same-terminal fallback. |
+| `external_subagents.py` | Generated read-only agent definitions per verified external model; `--agents` merge; launch-time eligibility. |
+| `claude_compat.py` | Claude executable identity, conservative `availableModels` policy, and one compatibility record per model. |
+| `probe_events.py` | Secure append-only NDJSON evidence shared by the router and the probe hooks. |
+| `subagent_probe.py` | The compatibility probe: `PreToolUse`/`SubagentStart` hooks, router registration, bounded verifier process, evidence join. |
 | `harnesses/claude.py` | The Claude harness: FR-21 env contract + `execve` launch. |
 | `shell.py` | Bare-`claude` integration (enabled by setup by default, marker-guarded, idempotent, reversible). |
 | `setup.py` / `doctor.py` / `uninstall.py` | Lifecycle commands. |
@@ -80,6 +84,34 @@
   The bridge is gated to the tested Codex CLI series before receiving a token, and usage
   reads—but never refreshes or rewrites—the live AGW credential. App Server receives a
   minimal environment rather than inheriting Claude/AGW/provider variables.
+- **External subagents are evidence-gated, not assumed.** The Agent tool's `model` argument
+  is Claude-only, so an external model reaches a subagent through a generated custom-agent
+  *definition*. Because Claude Code may replace a definition-level model it rejects, a type
+  is injected only from a `current` record under `<state>/external-subagents/compatibility/`
+  keyed to the exact Claude path, canonical target, digest, version, model, provider,
+  routing fingerprint, and contract version. Statuses are `current`, `missing`, `invalid`,
+  `failed`, `stale`, and `policy_excluded`; only `current` is advertised. A launch with no
+  stored evidence at all skips executable identification entirely, so an ordinary session
+  pays no `claude --version` or digest cost.
+- **The probe is the only thing that records routes.** During `models verify
+  --claude-subagent`, the `SubagentStart` hook appends the child's id and, in the same
+  synchronous call, registers a one-shot authorization at
+  `POST /_agw/control/v1/subagent-probes` (loopback peer, `X-AGW-Key`, 60-second expiry,
+  in-memory only). Claude Code drains that hook before the child's first model request, so
+  registration cannot race it. Exactly one matching request consumes the registration and
+  appends one route event. Ordinary sessions register nothing and persist nothing, and a
+  router restart loses registrations so verification fails closed.
+- **Probe evidence is a trust boundary.** Events live in `0700` directories as `0600` files,
+  are appended with `O_APPEND|O_NOFOLLOW` after re-validating containment, symlinks, owner,
+  mode, type, and device/inode, and each record is a single `os.write` below `PIPE_BUF`.
+  Records carry ids, model/provider names, and booleans — never prompts, responses, tool
+  content, headers, or credentials. `x-claude-code-agent-id` and
+  `x-claude-code-parent-agent-id` are stripped before any external forwarding.
+- **The probe process is bounded and always cleaned.** It runs non-interactively in its own
+  session and its own working directory, with a 90-second timeout, a spend cap, and
+  identity-checked SIGTERM/SIGKILL to the *process group* so hook children cannot be
+  orphaned. Event file, fixture, and run directory are removed on every exit path, including
+  cancellation, and a previous success is invalidated before the probe starts.
 
 ## Concurrency
 

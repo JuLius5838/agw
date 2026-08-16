@@ -35,7 +35,22 @@ a shell startup file. This document records the threats it defends against and h
 
 Prompts and tool schemas are sent to the selected external provider: OpenAI under the
 developer's ChatGPT/Codex account, or a model exposed by the developer's GitHub Copilot
-subscription under GitHub's applicable terms and data policy. These are compatibility- and
+subscription under GitHub's applicable terms and data policy.
+
+**External subagents extend that flow to repository content.** A generated `agw-…` agent
+runs on an external model and holds `Read`, `Grep`, and `Glob`, so any file it reads becomes
+model input for that provider. Generated definitions request no permission-mode override,
+cannot spawn further agents, and cannot run shell commands, edit files, or reach web/MCP
+tools. AGW sends the delegated task and its own definition; it does not copy the parent
+transcript, though Claude Code still supplies its normal subagent context.
+
+Compatibility and probe evidence is metadata only — model, provider, Claude executable
+identity and version, routing fingerprint, contract version, agent ids, a nonce, timestamps,
+and an outcome. Prompts, responses, tool inputs and results, headers, tokens, credentials,
+and provider paths are never written. Claude's `x-claude-code-agent-id` and
+`x-claude-code-parent-agent-id` lifecycle headers are stripped before external forwarding so
+they stay local. `agw uninstall` removes all generated compatibility and probe state; it
+never touches credentials without an explicit acknowledgement. These are compatibility- and
 policy-gated uses of LiteLLM subscription bridges. Native Claude traffic remains direct to
 Anthropic using Claude Code's saved login. See `docs/policy-decision.md`.
 

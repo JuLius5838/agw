@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import stat
 
@@ -22,6 +23,32 @@ def test_defaults_under_home(tmp_path):
     assert p.proxy_key_file == p.config_dir / "credentials" / "proxy-key"
     assert p.provider_credentials_dir("chatgpt") == p.credentials_dir / "chatgpt"
     assert p.shell_source_file("zsh") == p.config_dir / "shell" / "agw.zsh"
+
+
+def test_external_subagent_paths_stay_under_state_root(tmp_path):
+    paths = get_paths({"HOME": str(tmp_path)})
+    assert paths.external_subagents_dir == paths.state_dir / "external-subagents"
+    assert paths.compatibility_dir == paths.external_subagents_dir / "compatibility"
+    assert paths.probe_dir == paths.external_subagents_dir / "probes"
+    path = paths.compatibility_file("gpt-5.6-sol", "chatgpt")
+    assert path.parent == paths.compatibility_dir / "chatgpt"
+    assert path.name == hashlib.sha256(b"gpt-5.6-sol").hexdigest() + ".json"
+
+
+def test_compatibility_filename_separates_names_that_differ_only_by_case(tmp_path):
+    paths = get_paths({"HOME": str(tmp_path)})
+    # Hashing the exact UTF-8 public name keeps distinct models distinct even on
+    # a case-insensitive filesystem, where a raw name would collide.
+    assert paths.compatibility_file("Model-A", "chatgpt") != paths.compatibility_file(
+        "model-a", "chatgpt"
+    )
+
+
+@pytest.mark.parametrize("bad", ["", "..", "../escape", "Chatgpt", "chat gpt", "/abs", "-lead"])
+def test_compatibility_file_rejects_an_unsafe_provider_segment(tmp_path, bad):
+    paths = get_paths({"HOME": str(tmp_path)})
+    with pytest.raises(ValueError, match="invalid provider path segment"):
+        paths.compatibility_file("gpt-5.6-sol", bad)
 
 
 def test_xdg_overrides(tmp_path):

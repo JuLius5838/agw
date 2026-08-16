@@ -211,3 +211,197 @@ def test_uninstall_credentials_with_acknowledgement(tmp_path):
     )
     assert result.credentials_removed is True
     assert not paths.credentials_dir.exists()
+
+
+# --------------------------------------------------------------------------- #
+# External-subagent diagnostics (offline only)
+# --------------------------------------------------------------------------- #
+def _doctor_home(tmp_path, *, models=("gpt-5.6-sol",), rendered_config=True):
+    """A configured HOME with an offline-inspectable runtime."""
+    from agent_gateway.config import GatewayConfig, save_config
+    from agent_gateway.paths import get_paths
+
+    paths = get_paths({"HOME": str(tmp_path)})
+    claude = tmp_path / "claude"
+    claude.parent.mkdir(parents=True, exist_ok=True)
+    claude.write_text("#!/bin/sh\n")
+    claude.chmod(0o755)
+    save_config(paths, GatewayConfig(port=4000, native_claude_path=str(claude)))
+    paths.models_file.write_text(
+        "default_model: null\nmodels:\n"
+        + "".join(
+            f"  - name: {name}\n"
+            f"    provider: chatgpt\n"
+            f"    upstream_model: chatgpt/{name}\n"
+            f"    mode: responses\n"
+            f"    enabled: true\n"
+            for name in models
+        )
+    )
+    if rendered_config:
+        paths.generated_litellm_config.parent.mkdir(parents=True, exist_ok=True)
+        paths.generated_litellm_config.write_text("model_list: []\n")
+    return paths, claude
+
+
+def _identity(claude):
+    from agent_gateway.claude_compat import ClaudeExecutableIdentity
+
+    return ClaudeExecutableIdentity(
+        configured_path=str(claude),
+        resolved_path=str(claude.resolve()),
+        sha256="b" * 64,
+        version="2.1.232 (Claude Code)",
+    )
+
+
+def _seed_record(paths, claude, model, *, outcome="passed", fingerprint=None):
+    from agent_gateway.claude_compat import (
+        COMPATIBILITY_SCHEMA,
+        CompatibilityIdentity,
+        CompatibilityRecord,
+        utc_now,
+        write_compatibility_record,
+    )
+    from agent_gateway.external_subagents import DEFINITION_CONTRACT_VERSION
+    from agent_gateway.providers import Provider
+
+    write_compatibility_record(
+        paths,
+        CompatibilityRecord(
+            schema=COMPATIBILITY_SCHEMA,
+            identity=CompatibilityIdentity(
+                model=model,
+                provider=Provider.chatgpt,
+                claude=_identity(claude),
+                runtime_fingerprint=fingerprint or _fingerprint(paths),
+                definition_contract=DEFINITION_CONTRACT_VERSION,
+            ),
+            verified_at=utc_now(),
+            outcome=outcome,
+            detail="exact native subagent route verified" if outcome == "passed" else "nope",
+        ),
+    )
+
+
+def _fingerprint(paths):
+    from agent_gateway import proxy
+
+    return proxy.runtime_fingerprint(paths.generated_litellm_config.read_text())
+
+
+def _detail(report, name):
+    return next(check.detail for check in report.checks if check.name == name)
+
+
+def test_doctor_reports_each_active_model_subagent_status(tmp_path, monkeypatch):
+    from agent_gateway import doctor as doctor_mod
+
+    paths, claude = _doctor_home(tmp_path, models=("gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"))
+    monkeypatch.setattr(doctor_mod, "resolve_claude_identity", lambda _config: _identity(claude))
+    _seed_record(paths, claude, "gpt-5.6-sol")
+    _seed_record(paths, claude, "gpt-5.6-terra", fingerprint="d" * 64)
+
+    report = run_doctor(paths, online=False, env={"HOME": str(tmp_path)})
+
+    assert _detail(report, "external subagent gpt-5.6-sol") == "current"
+    assert _detail(report, "external subagent gpt-5.6-luna") == "external subagent not verified"
+    assert _detail(report, "external subagent gpt-5.6-terra") == (
+        "external subagent evidence is stale"
+    )
+
+
+def test_doctor_reports_a_policy_exclusion(tmp_path, monkeypatch):
+    from agent_gateway import doctor as doctor_mod
+
+    paths, claude = _doctor_home(tmp_path)
+    monkeypatch.setattr(doctor_mod, "resolve_claude_identity", lambda _config: _identity(claude))
+    _seed_record(paths, claude, "gpt-5.6-sol")
+    settings = tmp_path / ".claude"
+    settings.mkdir(parents=True, exist_ok=True)
+    (settings / "settings.json").write_text(json.dumps({"availableModels": ["sonnet"]}))
+
+    report = run_doctor(paths, online=False, env={"HOME": str(tmp_path)})
+    assert "excluded by Claude availableModels" in _detail(report, "external subagent gpt-5.6-sol")
+
+
+def test_doctor_reports_an_inspectable_reserved_id_collision(tmp_path, monkeypatch):
+    from agent_gateway import doctor as doctor_mod
+
+    paths, claude = _doctor_home(tmp_path)
+    monkeypatch.setattr(doctor_mod, "resolve_claude_identity", lambda _config: _identity(claude))
+    _seed_record(paths, claude, "gpt-5.6-sol")
+    settings = tmp_path / ".claude"
+    settings.mkdir(parents=True, exist_ok=True)
+    (settings / "settings.json").write_text(
+        json.dumps({"agents": {"agw-gpt-5-6-sol-66127d2195a1": {"description": "mine"}}})
+    )
+
+    report = run_doctor(paths, online=False, env={"HOME": str(tmp_path)})
+    collision = _detail(report, "external subagent id collision")
+    assert "agw-gpt-5-6-sol-66127d2195a1" in collision
+    assert "settings.json" in collision
+    assert "mine" not in collision  # only path and id, never the definition
+
+
+def test_doctor_degrades_when_the_runtime_fingerprint_is_unavailable(tmp_path, monkeypatch):
+    from agent_gateway import doctor as doctor_mod
+
+    paths, claude = _doctor_home(tmp_path, rendered_config=False)
+    monkeypatch.setattr(doctor_mod, "resolve_claude_identity", lambda _config: _identity(claude))
+
+    report = run_doctor(paths, online=False, env={"HOME": str(tmp_path)})
+    names = [check.name for check in report.checks]
+    assert "external subagent" in names
+    assert _detail(report, "external subagent") == (
+        "external subagent status unavailable until the proxy has been started once"
+    )
+    assert not any(name.startswith("external subagent gpt-") for name in names)
+
+
+def test_offline_doctor_makes_no_model_or_provider_call(tmp_path, monkeypatch):
+    from agent_gateway import doctor as doctor_mod
+
+    paths, claude = _doctor_home(tmp_path)
+    monkeypatch.setattr(doctor_mod, "resolve_claude_identity", lambda _config: _identity(claude))
+    _seed_record(paths, claude, "gpt-5.6-sol")
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("offline doctor must not verify or call a model")
+
+    monkeypatch.setattr("agent_gateway.subagent_probe.verify_native_subagent", forbidden)
+    monkeypatch.setattr("httpx.Client", forbidden)
+
+    report = run_doctor(paths, online=False, env={"HOME": str(tmp_path)})
+    assert _detail(report, "external subagent gpt-5.6-sol") == "current"
+
+
+def test_doctor_env_wording_covers_definition_level_overrides(tmp_path):
+    report = run_doctor(
+        get_paths({"HOME": str(tmp_path)}),
+        online=False,
+        env={"HOME": str(tmp_path), "CLAUDE_CODE_SUBAGENT_MODEL": "haiku"},
+    )
+    detail = _detail(report, "env CLAUDE_CODE_SUBAGENT_MODEL")
+    assert "definition-level and per-invocation subagent models" in detail
+
+
+def test_uninstall_removes_generated_external_subagent_state(tmp_path):
+    from agent_gateway.paths import atomic_write_text
+
+    paths = get_paths({"HOME": str(tmp_path)})
+    save_config(paths, GatewayConfig(port=4000))
+    ensure_proxy_key(paths)
+
+    record = paths.compatibility_file("gpt-5.6-sol", "chatgpt")
+    ensure_dir(record.parent)
+    atomic_write_text(record, "{}")
+    ensure_dir(paths.probe_dir)
+    atomic_write_text(paths.probe_dir / f"{'0' * 32}.ndjson", "")
+
+    result = run_uninstall(paths, credentials=False, env={"HOME": str(tmp_path)})
+
+    assert not paths.external_subagents_dir.exists()
+    assert str(paths.external_subagents_dir) in result.removed
+    # Credentials are untouched without --credentials.
+    assert paths.credentials_dir.exists()

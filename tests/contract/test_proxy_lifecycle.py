@@ -129,6 +129,12 @@ def test_fingerprint_mismatch_requires_explicit_restart(runtime) -> None:
     assert "restart" in (excinfo.value.hint or "")
 
 
+def test_runtime_abi_names_the_subagent_probe_control_contract() -> None:
+    # The router now owns a control endpoint and strips two more headers, so a
+    # daemon started under the old ABI must not be reused.
+    assert proxy.RUNTIME_ABI == "6-subagent-probe-control"
+
+
 def test_runtime_abi_change_invalidates_fingerprint(monkeypatch) -> None:
     rendered = "model_list: []\n"
     before = proxy.runtime_fingerprint(rendered)

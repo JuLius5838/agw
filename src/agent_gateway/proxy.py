@@ -39,7 +39,7 @@ STATE_SCHEMA = 2
 # Bump whenever the managed process composition or launch contract changes.
 # This makes editable/local upgrades fail closed instead of silently reusing a
 # daemon whose package version happens to be unchanged.
-RUNTIME_ABI = "5-litellm-readiness"
+RUNTIME_ABI = "6-subagent-probe-control"
 LOCK_TIMEOUT_SECONDS = 30.0
 READINESS_TIMEOUT_SECONDS = 30.0
 _READINESS_POLL_SECONDS = 0.25
@@ -263,6 +263,10 @@ def _spawn_supervisor(
 ) -> None:
     clear_state(paths)
     ensure_dir(paths.logs_dir)
+    # Created here so the router inherits a directory that already has the
+    # 0700 ownership its append-time validation requires.
+    ensure_dir(paths.external_subagents_dir)
+    ensure_dir(paths.probe_dir)
     internal_key = secrets.token_urlsafe(32)
     litellm_port = find_free_port(HOST) if with_litellm else None
     args = [
@@ -285,6 +289,8 @@ def _spawn_supervisor(
         config_fingerprint(read_text(paths.generated_litellm_config)),
         "--runtime-fingerprint",
         runtime_fp,
+        "--probe-dir",
+        str(paths.probe_dir),
     ]
     if litellm_port is not None:
         args.extend(

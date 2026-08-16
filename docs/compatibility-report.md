@@ -10,7 +10,8 @@
 | Python | 3.12.9 | pinned `>=3.12,<3.13` |
 | uv | 0.11.8 | |
 | LiteLLM | **1.93.0** | `litellm[proxy]`, pinned exactly; compromised `1.82.7`/`1.82.8` are forbidden |
-| Claude Code | **2.1.218** | current pilot version; per-invocation subagent models supported |
+| Claude Code | **2.1.218** | original pilot version for main-session routing |
+| Claude Code | **2.1.233** | external-subagent target, live-verified; the Agent tool's `model` argument accepts only `sonnet\|opus\|haiku\|fable`, so external models route through generated custom-agent definitions instead |
 
 ## Technical feasibility — verified offline
 
@@ -72,9 +73,58 @@ subscription, violating the hybrid contract.
 
 AGW therefore uses Claude's documented `ANTHROPIC_CUSTOM_MODEL_OPTION` fallback to add one
 exact external model to the visual picker. The remaining active names are directly
-selectable with `/model NAME`, `--model NAME`, and per-agent assignment. The authenticated
-`/v1/models` endpoint remains available for a future Claude release that supports discovery
-without replacing native subscription authentication.
+selectable with `/model NAME` and `--model NAME`. The authenticated `/v1/models` endpoint
+remains available for a future Claude release that supports discovery without replacing
+native subscription authentication.
+
+## External subagents (Claude Code 2.1.232)
+
+The picker and the Agent tool are separate surfaces with separate constraints. The Agent
+tool validates its explicit `model` argument against `sonnet|opus|haiku|fable` and rejects
+an external name client-side, before any request reaches AGW. A Claude Code custom-agent
+*definition* carries its own `model` field, so AGW generates one read-only definition per
+verified external model and injects them at launch with `--agents`; Claude then selects the
+type by `subagent_type` and omits the override.
+
+Anthropic does not support routing Claude Code to non-Claude models through a gateway, and
+Claude Code may replace a definition-level model it rejects with the inherited parent model
+and a warning — so a subagent that answers is not evidence that the external model ran. A
+generated type is therefore advertised only from a successful, current probe run explicitly
+by `agw models verify NAME --claude-subagent`, and the evidence is bound to the exact Claude
+executable path, canonical target, SHA-256, version string, model, provider, AGW routing
+fingerprint, and definition contract version. Any change makes it stale.
+
+This is a verification gate, not per-spawn runtime enforcement: it proves the behavior of
+one Claude build under a controlled probe. Ordinary sessions register no probe and persist
+no per-request evidence, so a later Claude regression is surfaced by re-verifying rather
+than caught retroactively on an unobserved spawn.
+
+### Live result (2026-08-16, Claude Code 2.1.233)
+
+✅ `gpt-5.6-luna`, `gpt-5.6-sol`, and `gpt-5.6-terra` each pass
+`agw models verify NAME --claude-subagent`. Correlated evidence shows the parent selecting
+the generated type with no explicit model override, the child starting under that type, and
+that child's request reaching the router under the exact public name and `chatgpt` provider.
+The run's own `modelUsage` independently reports both `claude-sonnet-5` (parent) and the
+external model (child), so native inheritance is ruled out. Probe state is removed
+afterwards, and no canary, prompt, or credential appears in any record or in `proxy.log`.
+
+Three client behaviors the probe has to tolerate, all observed live:
+
+- **Non-zero exit is not failure.** Claude Code exits `1` merely for printing
+  `[claude-code:unrecognized_model]` to stderr about an external name it does not know —
+  after routing that name, running the child on it, and completing successfully. The final
+  result object (`subtype: success`, `is_error: false`) is the authoritative outcome.
+- **The answer can arrive in a second result.** Claude may spawn the child in the
+  background, answer "it's running now", and deliver the real content later in another
+  result carrying `origin: {"kind": "task-notification"}`. Every successful result must be
+  considered, not just the first.
+- **`--print --output-format=stream-json` requires `--verbose`,** and `--mcp-config` rejects
+  a bare `{}` — the empty configuration must be spelled `{"mcpServers":{}}`.
+
+One unrelated rough edge, not a gate failure: the ChatGPT-backed child sometimes calls
+`Read` with `"pages": ""`, which the tool rejects (`Invalid pages parameter`). The model
+retries and completes, so the round trip succeeds, but it wastes a turn.
 
 ## Still requires the live pilot
 

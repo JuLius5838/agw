@@ -82,6 +82,9 @@ def run_uninstall(
     _remove(paths.generated_litellm_config, removed)
     _remove(paths.logs_dir, removed)
     _remove(paths.usage_dir, removed)
+    # Generated compatibility evidence and probe state: regenerable runtime
+    # state, never a credential.
+    _remove(paths.external_subagents_dir, removed)
     _remove(paths.shell_dir, removed)
     _remove(paths.config_file, removed)
     _remove(paths.models_file, removed)

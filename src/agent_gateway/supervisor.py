@@ -41,6 +41,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--litellm-version", required=True)
     parser.add_argument("--config-fingerprint", required=True)
     parser.add_argument("--runtime-fingerprint", required=True)
+    # Only the dedicated probe directory is passed down. The router needs to
+    # write compatibility evidence there and nowhere else.
+    parser.add_argument("--probe-dir", required=True)
     return parser.parse_args(argv)
 
 
@@ -162,6 +165,8 @@ def main(argv: list[str] | None = None) -> int:
         str(args.port),
         "--models-file",
         args.models_file,
+        "--probe-dir",
+        args.probe_dir,
     ]
     if has_litellm:
         router_command.extend(["--litellm-url", f"http://{args.litellm_host}:{args.litellm_port}"])

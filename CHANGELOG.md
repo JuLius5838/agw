@@ -4,6 +4,69 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses a single version for
 the plugin and the runtime, bumped together on every release.
 
+## [0.5.0] - 2026-08-16
+
+### Added
+- External models as native Claude subagents. Claude Code's built-in Agent tool validates
+  its explicit `model` argument against `sonnet|opus|haiku|fable` and rejects an external
+  name client-side, so AGW now encodes each verified external model in a generated
+  custom-agent *definition* and injects it at launch with `--agents`. Claude selects the
+  type by `subagent_type` alone, may run several external models concurrently, and
+  synthesizes their results through its normal child lifecycle. Generated ids are
+  deterministic and collision-resistant (`agw-<sanitized-model>-<12-hex-digest>`), and the
+  definition carries the exact public model name — display labels and ids are never routing
+  aliases.
+- `agw models verify NAME --claude-subagent`: an explicit compatibility gate. Anthropic does
+  not support routing Claude Code to non-Claude models through a gateway, and Claude Code may
+  replace a definition-level model it rejects with the inherited parent model, so a subagent
+  that answers is not evidence that the external model ran. The probe starts a bounded,
+  non-interactive Claude process and passes only on correlated evidence: the parent selected
+  the expected type with no model override, the child started under it, and that child's
+  request reached the router under the exact public name and configured provider. It makes
+  real Claude and provider model calls and never runs automatically from setup, `doctor`, or
+  launch.
+- One compatibility record per model under `<state>/external-subagents/compatibility/`,
+  bound to the exact Claude executable path, canonical target, SHA-256, version string,
+  model, provider, AGW routing fingerprint, and definition contract version. Statuses are
+  `current`, `missing`, `invalid`, `failed`, `stale`, and `policy_excluded`; only `current`
+  is advertised. Upgrading Claude or changing routing makes evidence stale and the type
+  disappears until re-verified — never a silent fallback to another model.
+- `agw doctor` explains per-model subagent status offline, including managed
+  `availableModels` exclusions and inspectable reserved-id collisions, without verifying or
+  calling any model.
+
+### Changed
+- Generated agents are analysis-only in v1: exactly `Read`, `Grep`, and `Glob`, with no
+  shell, editing, recursion, skills, web, or MCP access, and no permission-mode override.
+  Repository content such an agent reads is sent to that external provider — documented in
+  `docs/security.md` and stated in every generated agent description.
+- The front router strips `x-claude-code-agent-id` and `x-claude-code-parent-agent-id`
+  before external forwarding, so Claude's lifecycle identifiers stay local.
+  `X-Claude-Code-Session-Id` is unchanged.
+- Runtime ABI is now `6-subagent-probe-control`. A proxy started under the previous ABI is
+  not reused; run `agw proxy restart` after upgrading.
+- `agw uninstall` removes generated compatibility and probe state. Credentials still require
+  an explicit acknowledgement.
+- Documentation and the `model-routing` skill no longer claim per-agent model assignment or
+  agent-team teammate models; routing a subagent means selecting its generated type.
+
+### Notes
+- Live-verified on Claude Code 2.1.233 for `gpt-5.6-luna`, `gpt-5.6-sol`, and
+  `gpt-5.6-terra`: correlated route evidence plus Claude's own `modelUsage` reporting both
+  the parent Claude model and the external child model, which rules out native inheritance.
+  Two external models were also observed running concurrently with the parent synthesizing
+  both answers.
+- Three client behaviors the probe tolerates: Claude Code exits non-zero merely for printing
+  `[claude-code:unrecognized_model]` about a name it does not know (the result object is
+  authoritative); the real answer may arrive in a second result carrying
+  `origin: {"kind": "task-notification"}` when the child is backgrounded; and
+  `--print --output-format=stream-json` requires `--verbose` while `--mcp-config` rejects a
+  bare `{}`.
+- This is a verification gate, not per-spawn enforcement. Ordinary sessions register no
+  probe and persist no per-request evidence, so a later Claude regression is surfaced by
+  re-verifying rather than caught retroactively on an unobserved spawn.
+- Cross-provider Council is **not** part of this release and is being re-specified.
+
 ## [0.4.0] - 2026-07-24
 
 ### Added

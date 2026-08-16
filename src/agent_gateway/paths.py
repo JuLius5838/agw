@@ -15,8 +15,10 @@ state.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import importlib.resources as importlib_resources
 import os
+import re
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -29,6 +31,9 @@ _IS_POSIX = os.name == "posix"
 # Default restrictive permissions (POSIX only).
 DIR_MODE = 0o700
 SECRET_FILE_MODE = 0o600
+
+# One safe lowercase path component: no separators, traversal, or leading dot.
+_PROVIDER_SEGMENT = re.compile(r"[a-z0-9][a-z0-9_-]*")
 
 
 @dataclass(frozen=True)
@@ -93,6 +98,34 @@ class Paths:
     @property
     def claude_usage_file(self) -> Path:
         return self.usage_dir / "claude.json"
+
+    # --- generated external-subagent state ---
+    @property
+    def external_subagents_dir(self) -> Path:
+        return self.state_dir / "external-subagents"
+
+    @property
+    def compatibility_dir(self) -> Path:
+        return self.external_subagents_dir / "compatibility"
+
+    @property
+    def probe_dir(self) -> Path:
+        return self.external_subagents_dir / "probes"
+
+    def compatibility_file(self, model: str, provider: str) -> Path:
+        """Locate one model's compatibility record.
+
+        The filename is a hash of the exact UTF-8 public model name, not the name
+        itself: public names contain characters that are awkward or ambiguous in a
+        path, and a case-insensitive filesystem would otherwise merge two distinct
+        models. The record carries the public name inside it, so the filename is
+        never usable as a routing alias. The provider stays a readable directory
+        component, validated so it can only ever be one safe segment.
+        """
+        if not _PROVIDER_SEGMENT.fullmatch(provider):
+            raise ValueError("invalid provider path segment")
+        digest = hashlib.sha256(model.encode("utf-8")).hexdigest()
+        return self.compatibility_dir / provider / f"{digest}.json"
 
 
 def _xdg_base(env: Mapping[str, str], var: str, default_root: Path) -> Path:

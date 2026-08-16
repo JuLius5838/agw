@@ -10,6 +10,7 @@
 | `agw models add NAME [-p PROVIDER] [-u UPSTREAM] [-m responses\|chat] [--display-name L] [--no-enable] [--default]` | Append a validated model to the registry. Provider defaults to `chatgpt` and upstream to `chatgpt/NAME`. Never overwrites an existing name+provider. |
 | `agw models remove NAME [-p PROVIDER]` | Remove a model from the registry; clears `default_model` if it no longer resolves. `--provider` disambiguates a name with multiple candidates. |
 | `agw models verify [MODEL]` | Anthropic-protocol compatibility checks through the proxy. |
+| `agw models verify [MODEL] --claude-subagent` | Additionally prove the model works as a native Claude *subagent*. Starts a bounded, non-interactive Claude process whose child reaches the external provider, so it makes real model calls and never runs automatically. |
 | `agw usage [--json]` | Unified Claude subscription windows and live Codex limits, reset credits, and token activity. |
 | `agw proxy start\|stop\|restart\|status` | Manage the loopback proxy. `restart` is the only path that applies a changed config/version. |
 | `agw claude [ARGS...]` | Launch Claude Code through the gateway (args forwarded verbatim). |
